@@ -1,0 +1,6 @@
+{
+  "scope": "x_snc_build_agranx",
+  "scopeId": "748e8d343b2987149a1600b693e45a0c",
+  "name": "Build Agent Analytics",
+  "tsconfigPath": "./src/server/tsconfig.json"
+}
