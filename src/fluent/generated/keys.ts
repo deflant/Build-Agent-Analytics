@@ -80,6 +80,7 @@ declare global {
                     {
                         table: 'sn_glider_source_artifact_m2m'
                         id: '1897c628da2b4925884d67f7afab4157'
+                        deleted: true
                         key: {
                             application_file: '37c4686d545846de850bf5ef33b19145'
                             source_artifact: '894ba54622ba49a880c45d36165607f3'
@@ -90,6 +91,14 @@ declare global {
                         id: '1cb74eceafcb4e31aef32a359f35da31'
                         key: {
                             name: 'x_snc_build_agranx/index-3862675e.js.map'
+                        }
+                    },
+                    {
+                        table: 'sys_dictionary'
+                        id: '1cc8c5ff6b1e40d3862a8fda35b7ebe9'
+                        key: {
+                            name: 'x_snc_build_agranx_timeseries_cache'
+                            element: 'user'
                         }
                     },
                     {
@@ -117,6 +126,21 @@ declare global {
                     },
                     {
                         table: 'sys_ux_lib_asset'
+                        id: '294a518ca129416fa2746f8783c3d193'
+                        key: {
+                            name: 'x_snc_build_agranx/vendor-mermaid--4a199bd7'
+                        }
+                    },
+                    {
+                        table: 'sys_dictionary'
+                        id: '2a67b279d2aa4d7994c6afc892b943c8'
+                        key: {
+                            name: 'x_snc_build_agranx_timeseries_cache'
+                            element: 'message_count'
+                        }
+                    },
+                    {
+                        table: 'sys_ux_lib_asset'
                         id: '2ccb504eb5c24d24958ce36963721620'
                         key: {
                             name: 'x_snc_build_agranx/pieDiagram-8a3498a8.js.map'
@@ -132,6 +156,7 @@ declare global {
                     {
                         table: 'sys_ux_lib_asset'
                         id: '37c4686d545846de850bf5ef33b19145'
+                        deleted: true
                         key: {
                             name: 'x_snc_build_agranx/vendor-mermaid--e1704645'
                         }
@@ -155,6 +180,7 @@ declare global {
                     {
                         table: 'sn_glider_source_artifact_m2m'
                         id: '38ee748e36254fb2b641b2d8901f6104'
+                        deleted: true
                         key: {
                             application_file: '922dcb9faf644f42ba8e689b338bb153'
                             source_artifact: '894ba54622ba49a880c45d36165607f3'
@@ -165,6 +191,15 @@ declare global {
                         id: '3c74a7c7827446dc8c18b26e6da362cc'
                         key: {
                             name: 'x_snc_build_agranx/c4Diagram-3d4e48cf'
+                        }
+                    },
+                    {
+                        table: 'sys_documentation'
+                        id: '3d6650993b1740d09f4a0aa6d9cfba05'
+                        key: {
+                            name: 'x_snc_build_agranx_timeseries_cache'
+                            element: 'period_date'
+                            language: 'en'
                         }
                     },
                     {
@@ -196,6 +231,13 @@ declare global {
                             name: 'x_snc_build_agranx_settings'
                             element: 'key'
                             language: 'en'
+                        }
+                    },
+                    {
+                        table: 'sys_db_object'
+                        id: '4322452993f7476cb1568a87fce32eec'
+                        key: {
+                            name: 'x_snc_build_agranx_timeseries_cache'
                         }
                     },
                     {
@@ -256,6 +298,13 @@ declare global {
                         }
                     },
                     {
+                        table: 'ua_table_licensing_config'
+                        id: '5a3a34986739480b8fd006188638095a'
+                        key: {
+                            name: 'x_snc_build_agranx_timeseries_cache'
+                        }
+                    },
+                    {
                         table: 'sys_ux_lib_asset'
                         id: '5adee95b2607476b842ff3b9a2e6a06d'
                         key: {
@@ -274,6 +323,14 @@ declare global {
                         id: '5baf9acf5f30421a88292fda1e8b7847'
                         key: {
                             application_file: '5b2421d3a6854c49a767da8f847aa687'
+                            source_artifact: '894ba54622ba49a880c45d36165607f3'
+                        }
+                    },
+                    {
+                        table: 'sn_glider_source_artifact_m2m'
+                        id: '5c6886bde46d4a61a42c8109321e87b0'
+                        key: {
+                            application_file: 'c1d520e7603040109abc2ab4b2b2b1bf'
                             source_artifact: '894ba54622ba49a880c45d36165607f3'
                         }
                     },
@@ -297,6 +354,14 @@ declare global {
                         id: '60556bfce67049858cf38c62bb22ab53'
                         key: {
                             name: 'x_snc_build_agranx/stateDiagram-587899a1'
+                        }
+                    },
+                    {
+                        table: 'sys_dictionary'
+                        id: '622dff9f59c746c58f881627c1502302'
+                        key: {
+                            name: 'x_snc_build_agranx_timeseries_cache'
+                            element: 'NULL'
                         }
                     },
                     {
@@ -386,6 +451,15 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_documentation'
+                        id: '79f9555aa4e14fdda519f500c091444d'
+                        key: {
+                            name: 'x_snc_build_agranx_timeseries_cache'
+                            element: 'user'
+                            language: 'en'
+                        }
+                    },
+                    {
                         table: 'sys_ux_lib_asset'
                         id: '8597be0ca2c64678acbb246740196202'
                         key: {
@@ -448,6 +522,7 @@ declare global {
                     {
                         table: 'sys_ux_lib_asset'
                         id: '922dcb9faf644f42ba8e689b338bb153'
+                        deleted: true
                         key: {
                             name: 'x_snc_build_agranx/vendor-mermaid--e1704645.js.map'
                         }
@@ -516,6 +591,14 @@ declare global {
                         }
                     },
                     {
+                        table: 'sn_glider_source_artifact_m2m'
+                        id: 'acd784555aad45419edb6d221b7eb384'
+                        key: {
+                            application_file: '294a518ca129416fa2746f8783c3d193'
+                            source_artifact: '894ba54622ba49a880c45d36165607f3'
+                        }
+                    },
+                    {
                         table: 'sys_ux_lib_asset'
                         id: 'ae21734e7caa4444a0fe90eebd2a5b61'
                         key: {
@@ -537,11 +620,36 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_dictionary'
+                        id: 'b48b378c3f2d422990cea09adaa87b7e'
+                        key: {
+                            name: 'x_snc_build_agranx_timeseries_cache'
+                            element: 'period_date'
+                        }
+                    },
+                    {
                         table: 'sn_glider_source_artifact_m2m'
                         id: 'b4b76d5e2ecc4a889ed4bbe7ce359344'
                         key: {
                             application_file: 'a7250d193ed444c48179bb71e825c78d'
                             source_artifact: '894ba54622ba49a880c45d36165607f3'
+                        }
+                    },
+                    {
+                        table: 'sys_dictionary'
+                        id: 'b5221cda565848afa8214cf9f87e5f8a'
+                        key: {
+                            name: 'x_snc_build_agranx_timeseries_cache'
+                            element: 'application_id'
+                        }
+                    },
+                    {
+                        table: 'sys_documentation'
+                        id: 'b94b7b69878b4b1fbd5705f2ac9f3c7e'
+                        key: {
+                            name: 'x_snc_build_agranx_timeseries_cache'
+                            element: 'application_id'
+                            language: 'en'
                         }
                     },
                     {
@@ -564,6 +672,13 @@ declare global {
                         id: 'c1b4621726e64028acc53227a6e4c91a'
                         key: {
                             name: 'x_snc_build_agranx/vendor-katex--6afa0709'
+                        }
+                    },
+                    {
+                        table: 'sys_ux_lib_asset'
+                        id: 'c1d520e7603040109abc2ab4b2b2b1bf'
+                        key: {
+                            name: 'x_snc_build_agranx/vendor-mermaid--4a199bd7.js.map'
                         }
                     },
                     {
@@ -603,6 +718,14 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_dictionary'
+                        id: 'c95c216f06bf4709b98a30328a72a94f'
+                        key: {
+                            name: 'x_snc_build_agranx_timeseries_cache'
+                            element: 'token_count'
+                        }
+                    },
+                    {
                         table: 'sys_ux_lib_asset'
                         id: 'ce124143319540c0b0c79876f7bbd18f'
                         key: {
@@ -614,6 +737,15 @@ declare global {
                         id: 'cf320f536b9d4088875ad8140351c64f'
                         key: {
                             name: 'x_snc_build_agranx/styles-9a916d00'
+                        }
+                    },
+                    {
+                        table: 'sys_documentation'
+                        id: 'cfa173175e1e444eb68ce90e8bd49c05'
+                        key: {
+                            name: 'x_snc_build_agranx_timeseries_cache'
+                            element: 'token_count'
+                            language: 'en'
                         }
                     },
                     {
@@ -715,6 +847,15 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_documentation'
+                        id: 'f4883f7f9fae49c7b6c0beebde18c6e2'
+                        key: {
+                            name: 'x_snc_build_agranx_timeseries_cache'
+                            element: 'NULL'
+                            language: 'en'
+                        }
+                    },
+                    {
                         table: 'sys_ux_lib_asset'
                         id: 'fa642c7e78ef42f19e7cff22cac4a63c'
                         key: {
@@ -741,6 +882,15 @@ declare global {
                         key: {
                             name: 'x_snc_build_agranx_settings'
                             element: 'user'
+                        }
+                    },
+                    {
+                        table: 'sys_documentation'
+                        id: 'fe645a4c74f449d1ae6ff488e4abd74f'
+                        key: {
+                            name: 'x_snc_build_agranx_timeseries_cache'
+                            element: 'message_count'
+                            language: 'en'
                         }
                     },
                 ]

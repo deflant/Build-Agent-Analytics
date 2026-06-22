@@ -4,6 +4,7 @@ import Applications from "./components/Applications.tsx";
 import AppDetail from "./components/AppDetail.tsx";
 import ConversationDetail from "./components/ConversationDetail.tsx";
 import AgentPerformance from "./components/AgentPerformance.tsx";
+import TimeSeriesView from "./components/TimeSeriesView.tsx";
 import "./app.css";
 
 declare const window: any;
@@ -69,6 +70,8 @@ export default function App() {
         );
       case "performance":
         return <AgentPerformance />;
+      case "timeseries":
+        return <TimeSeriesView />;
       case "applications":
       default:
         return <Applications onNavigate={navigateToView} />;

@@ -93,6 +93,8 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
         if (!mermaidSource) continue;
 
         try {
+          // Validate syntax before rendering to avoid error popups
+          await mermaid.parse(mermaidSource);
           const id = `mermaid-diagram-${currentRenderId}-${i}`;
           const { svg } = await mermaid.render(id, mermaidSource);
           el.innerHTML = svg;
@@ -102,6 +104,11 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
           el.innerHTML = `<pre class="mermaid-error"><code>${mermaidSource.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</code></pre>`;
           el.classList.add("mermaid-error-container");
         }
+
+        // Clean up any stray mermaid error elements injected into the DOM
+        document.querySelectorAll("[id^='d'].mermaid").forEach((node) => {
+          if (node.querySelector(".error-icon")) node.remove();
+        });
       }
     }
 

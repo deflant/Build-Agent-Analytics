@@ -5,10 +5,13 @@ interface KpiCardProps {
   value: string | number;
   icon?: "user" | "assistant" | "cost" | "duration" | "tokens" | string;
   tooltip?: string;
+  onRefresh?: () => Promise<void>;
+  loading?: boolean;
 }
 
-export default function KpiCard({ title, value: kpiValue, icon, tooltip }: KpiCardProps) {
+export default function KpiCard({ title, value: kpiValue, icon, tooltip, onRefresh, loading }: KpiCardProps) {
   const [showTooltip, setShowTooltip] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const iconEmoji = icon === "user" ? "👤"
     : icon === "assistant" ? "🤖"
@@ -29,15 +32,39 @@ export default function KpiCard({ title, value: kpiValue, icon, tooltip }: KpiCa
     ? " ba-kpi-card--tokens"
     : "";
 
+  const isLoading = loading || refreshing;
+
+  async function handleRefresh(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!onRefresh || isLoading) return;
+    setRefreshing(true);
+    try {
+      await onRefresh();
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
   return (
     <div
       className={`ba-kpi-card${modifier}`}
       onMouseEnter={() => tooltip && setShowTooltip(true)}
       onMouseLeave={() => setShowTooltip(false)}
     >
-      <div className="ba-kpi-card__value">
+      {onRefresh && (
+        <button
+          className={`ba-kpi-card__refresh${isLoading ? " ba-kpi-card__refresh--spinning" : ""}`}
+          onClick={handleRefresh}
+          disabled={isLoading}
+          title="Refresh"
+          aria-label={`Refresh ${title}`}
+        >
+          ↻
+        </button>
+      )}
+      <div className={`ba-kpi-card__value${isLoading ? " ba-kpi-card__value--loading" : ""}`}>
         {iconEmoji && <span className="ba-kpi-card__icon">{iconEmoji}</span>}
-        {kpiValue}
+        {isLoading ? "…" : kpiValue}
       </div>
       <div className="ba-kpi-card__title">{title}</div>
       {tooltip && showTooltip && (

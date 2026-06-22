@@ -14,29 +14,54 @@ export const value = (field: any): string => {
 
 export type MessageSender = "user" | "assistant" | "assistant-thinking" | "assistant-tool";
 
+export interface ToolDetails {
+  toolActualName: string;
+  toolInput: Record<string, any>;
+  toolUseId: string;
+  success: boolean;
+  duration: number;
+  result: string;
+}
+
 export interface ParsedMessage {
   id: string;
   sender: MessageSender;
   text: string;
   toolName?: string;
   complete?: boolean;
+  toolDetails?: ToolDetails;
 }
 
 /**
  * Parse the content JSON from a message record to extract sender info.
+ * For tool messages, extracts full tool details (input, output, duration, success).
  */
 export function parseMessageContent(contentField: any): ParsedMessage | null {
   const raw = value(contentField);
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw);
-    return {
+    const msg: ParsedMessage = {
       id: parsed.id || "",
       sender: parsed.sender || "assistant",
       text: parsed.text || "",
       toolName: parsed.toolName,
       complete: parsed.complete,
     };
+
+    // Extract full tool details for tool messages
+    if (parsed.sender === "assistant-tool" && parsed.toolActualName) {
+      msg.toolDetails = {
+        toolActualName: parsed.toolActualName || "",
+        toolInput: parsed.toolInput || {},
+        toolUseId: parsed.toolUseId || "",
+        success: parsed.success ?? true,
+        duration: parsed.duration || 0,
+        result: parsed.result || "",
+      };
+    }
+
+    return msg;
   } catch {
     return null;
   }

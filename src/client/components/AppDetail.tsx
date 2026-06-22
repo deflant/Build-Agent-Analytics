@@ -12,8 +12,14 @@ import {
   calculateROI,
   DEFAULT_WEIGHTS,
   DEFAULT_PARTNER_ESTIMATES,
+  ALL_COMPOSITION_KEYS,
+  COMPONENT_LABELS,
+  COMPONENT_ICONS,
+  COMPOSITION_CATEGORIES,
+  getTotalComponentCount,
+  mergeWithDefaults,
 } from "../utils/complexity.ts";
-import type { ComplexityWeights, PartnerEstimates, ROIResult } from "../utils/complexity.ts";
+import type { ComplexityWeights, PartnerEstimates, ROIResult, CompositionKey } from "../utils/complexity.ts";
 import KpiCard from "./KpiCard.tsx";
 import DataTable from "./DataTable.tsx";
 
@@ -56,7 +62,6 @@ function CompositionTile({ icon, label, items, onOpen }: { icon: string; label: 
 
 /** Modal that shows the list of items for a composition category */
 function CompositionModal({ icon, label, items, onClose }: { icon: string; label: string; items: ComponentItem[]; onClose: () => void }) {
-  // Close on Escape key
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
@@ -128,6 +133,9 @@ function SettingsEditor({
     }
   }
 
+  // Only show keys that have corresponding items in composition (non-zero weight is always shown in settings)
+  const visibleKeys = Object.keys(values).filter((k) => labels[k]);
+
   return (
     <div className="ba-modal-overlay" onClick={onCancel}>
       <div className="ba-settings-modal" onClick={(e) => e.stopPropagation()}>
@@ -137,7 +145,7 @@ function SettingsEditor({
           <button className="ba-modal__close" onClick={onCancel} type="button" title="Close">✕</button>
         </div>
         <div className="ba-settings-modal__body">
-          {Object.keys(values).map((key) => (
+          {visibleKeys.map((key) => (
             <div className="ba-settings-modal__row" key={key}>
               <span className="ba-settings-modal__label">{labels[key] || key}</span>
               <input
@@ -158,15 +166,6 @@ function SettingsEditor({
     </div>
   );
 }
-
-const COMPONENT_LABELS: Record<string, string> = {
-  tables: "Tables",
-  uiPages: "UI Pages",
-  workspaces: "Workspaces",
-  portals: "Portals",
-  widgets: "Widgets",
-  flows: "Flows",
-};
 
 export default function AppDetail({ appId, onNavigate }: AppDetailProps) {
   const [appName, setAppName] = useState("");
@@ -202,9 +201,9 @@ export default function AppDetail({ appId, onNavigate }: AppDetailProps) {
   async function loadUserSettings() {
     try {
       const savedWeights = await fetchSettings("complexity_weights");
-      if (savedWeights) setWeights(savedWeights);
+      if (savedWeights) setWeights(mergeWithDefaults(savedWeights, DEFAULT_WEIGHTS));
       const savedEstimates = await fetchSettings("partner_estimates");
-      if (savedEstimates) setEstimates(savedEstimates);
+      if (savedEstimates) setEstimates(mergeWithDefaults(savedEstimates, DEFAULT_PARTNER_ESTIMATES));
     } catch (e) {
       // Use defaults if settings fetch fails
     }
@@ -246,11 +245,9 @@ export default function AppDetail({ appId, onNavigate }: AppDetailProps) {
         assistantTotal += counts.assistant;
         chkTotal += chks.length;
 
-        // Compute token usage for this conversation
         const tokenUsage = analyzeConversation(msgs);
         convoTokenUsages.push(tokenUsage);
 
-        // Store messages for duration calculation
         allConvoMessages.push(msgs);
 
         convoResults.push({
@@ -268,15 +265,12 @@ export default function AppDetail({ appId, onNavigate }: AppDetailProps) {
       setTotalCheckpoints(chkTotal);
       setConvoData(convoResults);
 
-      // Aggregate application-level token usage
       const appUsage = aggregateApplicationUsage(convoTokenUsages);
       setAppTokenUsage(appUsage);
 
-      // Calculate implementation duration from user message intervals
       const duration = formatImplDuration(allConvoMessages);
       setImplDuration(duration);
 
-      // Calculate raw minutes for ROI
       const minutes = getImplMinutes(allConvoMessages);
       setImplMinutes(minutes);
     } catch (e) {
@@ -326,18 +320,18 @@ export default function AppDetail({ appId, onNavigate }: AppDetailProps) {
 
   const nowAssistUnits = totalUser * NOWASSIST_UNIT_COST;
 
-  // Build token breakdown tooltip (same style as NowAssist Units)
   const tokenTooltip = appTokenUsage && appTokenUsage.total > 0
     ? `input: ~${formatTokenCount(appTokenUsage.input)} · output: ~${formatTokenCount(appTokenUsage.output)} · thinking: ~${formatTokenCount(appTokenUsage.thinking)}`
     : undefined;
 
   // Complexity & ROI calculations
   const complexScore = composition ? calculateComplexity(composition, weights) : 0;
-  const complexLabel = complexityLabel(complexScore);
+  const complexLabel = composition ? complexityLabel(complexScore) : null;
   const manualHours = composition ? calculateManualHours(composition, estimates) : 0;
   const roi: ROIResult | null = composition && implMinutes > 0
     ? calculateROI(manualHours, implMinutes)
     : null;
+  const totalComponents = composition ? getTotalComponentCount(composition) : 0;
 
   const columns = [
     { key: "title", label: "Conversation", render: (r: ConvoWithCounts) => display(r.raw.title) || "Untitled" },
@@ -380,10 +374,12 @@ export default function AppDetail({ appId, onNavigate }: AppDetailProps) {
         />
       </div>
 
-      {/* Application Composition Scan */}
+      {/* ═══════════════════════════════════════════════════════════════════════
+          SECTION 1: APPLICATION SCAN
+          ═══════════════════════════════════════════════════════════════════════ */}
       <div className="ba-section">
         <div className="ba-section__header">
-          <h2 className="ba-section__title">Application Composition</h2>
+          <h2 className="ba-section__title">🔍 Application Scan</h2>
           <button
             className="ba-scan-btn"
             onClick={scanApplication}
@@ -395,140 +391,170 @@ export default function AppDetail({ appId, onNavigate }: AppDetailProps) {
         </div>
         {scanError && <p className="ba-scan-error">{scanError}</p>}
         {composition && (
-          <div className="ba-composition-grid">
-            <CompositionTile icon="🗃️" label="Tables" items={composition.tables} onOpen={() => setModalData({ icon: "🗃️", label: "Tables", items: composition.tables })} />
-            <CompositionTile icon="📄" label="UI Pages" items={composition.uiPages} onOpen={() => setModalData({ icon: "📄", label: "UI Pages", items: composition.uiPages })} />
-            <CompositionTile icon="🖥️" label="Workspaces" items={composition.workspaces} onOpen={() => setModalData({ icon: "🖥️", label: "Workspaces", items: composition.workspaces })} />
-            <CompositionTile icon="🌐" label="Portals" items={composition.portals} onOpen={() => setModalData({ icon: "🌐", label: "Portals", items: composition.portals })} />
-            <CompositionTile icon="🧩" label="Widgets" items={composition.widgets} onOpen={() => setModalData({ icon: "🧩", label: "Widgets", items: composition.widgets })} />
-            <CompositionTile icon="⚡" label="Flows" items={composition.flows} onOpen={() => setModalData({ icon: "⚡", label: "Flows", items: composition.flows })} />
-          </div>
+          <>
+            <p className="ba-scan-summary">
+              Found <strong>{totalComponents}</strong> component{totalComponents !== 1 ? "s" : ""} across{" "}
+              {COMPOSITION_CATEGORIES.filter((cat) => cat.keys.some((k) => composition[k].length > 0)).length} categories
+            </p>
+            <div className="ba-composition-categories">
+              {COMPOSITION_CATEGORIES.map((cat) => {
+                const catTotal = cat.keys.reduce((sum, k) => sum + composition[k].length, 0);
+                if (catTotal === 0) return null;
+                return (
+                  <div className="ba-composition-category" key={cat.label}>
+                    <h3 className="ba-composition-category__title">{cat.label} <span className="ba-composition-category__count">{catTotal}</span></h3>
+                    <div className="ba-composition-grid">
+                      {cat.keys.map((key) => (
+                        <CompositionTile
+                          key={key}
+                          icon={COMPONENT_ICONS[key]}
+                          label={COMPONENT_LABELS[key]}
+                          items={composition[key]}
+                          onOpen={() => setModalData({ icon: COMPONENT_ICONS[key], label: COMPONENT_LABELS[key], items: composition[key] })}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
         )}
         {!composition && !scanning && (
           <p className="ba-scan-hint">
-            Click "Scan Application" to analyze the internal components of this app and understand its complexity.
+            Click "Scan Application" to discover all metadata components that make up this app.
           </p>
         )}
       </div>
 
-      {/* Complexity Score Panel */}
+      {/* ═══════════════════════════════════════════════════════════════════════
+          SECTION 2: EFFORT ESTIMATION (only visible after scan)
+          ═══════════════════════════════════════════════════════════════════════ */}
       {composition && (
-        <div className="ba-complexity">
-          <div className="ba-complexity__header">
-            <span className="ba-complexity__score" style={{ color: complexLabel.color }}>{complexScore}</span>
-            <div>
-              <span className="ba-complexity__label" style={{ color: complexLabel.color }}>{complexLabel.label}</span>
-            </div>
-            <button
-              className="ba-scan-btn"
-              onClick={() => setEditingWeights(!editingWeights)}
-              type="button"
-              style={{ marginLeft: "auto", fontSize: "0.75rem", padding: "0.375rem 1rem" }}
-            >
-              {editingWeights ? "Cancel" : "Edit Weights"}
-            </button>
+        <div className="ba-section ba-section--effort">
+          <div className="ba-section__header">
+            <h2 className="ba-section__title">📊 Effort Estimation</h2>
           </div>
-          {editingWeights && (
-            <SettingsEditor
-              title="Complexity Weights"
-              values={weights as unknown as Record<string, number>}
-              labels={COMPONENT_LABELS}
-              onSave={handleSaveWeights}
-              onCancel={() => setEditingWeights(false)}
-            />
-          )}
-          <div className="ba-complexity__breakdown">
-            {(Object.keys(COMPONENT_LABELS) as Array<keyof ComplexityWeights>).map((key) => {
-              const count = composition[key].length;
-              const weight = weights[key];
-              const subtotal = count * weight;
-              if (count === 0) return null;
-              return (
-                <div className="ba-complexity__row" key={key}>
-                  <span>{count} {COMPONENT_LABELS[key]} × {weight}</span>
-                  <span style={{ fontWeight: 700 }}>{subtotal}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
-      {/* ROI / Savings Panel — Collapsible */}
-      {composition && roi && (
-        <div className={`ba-roi ${roiOpen ? "ba-roi--open" : ""}`}>
-          <button
-            className="ba-roi__toggle"
-            onClick={() => setRoiOpen(!roiOpen)}
-            type="button"
-          >
-            <span className="ba-roi__toggle-icon">{roiOpen ? "▾" : "▸"}</span>
-            <span className="ba-roi__title">💰 ROI — Build Agent Savings</span>
-            <span className="ba-roi__toggle-preview">
-              {roi.savedHours.toFixed(1)}h saved · {roi.savingsPercent.toFixed(0)}%
-            </span>
-          </button>
-          {roiOpen && (
-            <div className="ba-roi__body">
-              <div className="ba-roi__header">
-                <button
-                  className="ba-scan-btn"
-                  onClick={() => setEditingEstimates(!editingEstimates)}
-                  type="button"
-                  style={{ fontSize: "0.75rem", padding: "0.375rem 1rem" }}
-                >
-                  {editingEstimates ? "Cancel" : "Edit Estimates"}
-                </button>
+          {/* Complexity Score Panel */}
+          <div className="ba-complexity">
+            <div className="ba-complexity__header">
+              <span className="ba-complexity__score" style={{ color: complexLabel?.color }}>{complexScore}</span>
+              <div>
+                <span className="ba-complexity__label" style={{ color: complexLabel?.color }}>{complexLabel?.label}</span>
               </div>
-              {editingEstimates && (
-                <SettingsEditor
-                  title="Partner Hour Estimates"
-                  values={estimates as unknown as Record<string, number>}
-                  labels={Object.fromEntries(
-                    Object.keys(COMPONENT_LABELS).map((k) => [k, `${COMPONENT_LABELS[k]} (hrs)`])
-                  )}
-                  onSave={handleSaveEstimates}
-                  onCancel={() => setEditingEstimates(false)}
-                />
-              )}
-              <div className="ba-roi__savings">
-                <div>
-                  <div className="ba-roi__savings-value">{roi.savedHours.toFixed(1)}h saved</div>
-                  <div className="ba-roi__savings-label">Time Savings</div>
-                </div>
-                <div className="ba-roi__savings-percent">{roi.savingsPercent.toFixed(0)}%</div>
-              </div>
-              <div className="ba-roi__comparison">
-                <div className="ba-roi__metric">
-                  <div className="ba-roi__metric-value" style={{ color: "#dc2626" }}>{roi.manualHours}h</div>
-                  <div className="ba-roi__metric-label">Manual Estimate</div>
-                </div>
-                <div className="ba-roi__metric">
-                  <div className="ba-roi__metric-value" style={{ color: "#059669" }}>
-                    {Math.floor(roi.buildAgentHours)}h {Math.round((roi.buildAgentHours % 1) * 60)}m
+              <button
+                className="ba-scan-btn"
+                onClick={() => setEditingWeights(!editingWeights)}
+                type="button"
+                style={{ marginLeft: "auto", fontSize: "0.75rem", padding: "0.375rem 1rem" }}
+              >
+                {editingWeights ? "Cancel" : "Edit Weights"}
+              </button>
+            </div>
+            {editingWeights && (
+              <SettingsEditor
+                title="Complexity Weights"
+                values={weights as unknown as Record<string, number>}
+                labels={COMPONENT_LABELS as unknown as Record<string, string>}
+                onSave={handleSaveWeights}
+                onCancel={() => setEditingWeights(false)}
+              />
+            )}
+            <div className="ba-complexity__breakdown">
+              {ALL_COMPOSITION_KEYS.map((key) => {
+                const count = composition[key].length;
+                const weight = weights[key];
+                const subtotal = count * weight;
+                if (count === 0) return null;
+                return (
+                  <div className="ba-complexity__row" key={key}>
+                    <span>{count} {COMPONENT_LABELS[key]} × {weight}</span>
+                    <span style={{ fontWeight: 700 }}>{subtotal}</span>
                   </div>
-                  <div className="ba-roi__metric-label">Build Agent Time</div>
-                </div>
-              </div>
-              <div className="ba-roi__breakdown">
-                {(Object.keys(COMPONENT_LABELS) as Array<keyof PartnerEstimates>).map((key) => {
-                  const count = composition[key].length;
-                  const hrs = estimates[key];
-                  const total = count * hrs;
-                  if (count === 0) return null;
-                  return (
-                    <div className="ba-roi__breakdown-row" key={key}>
-                      <span>{count} {COMPONENT_LABELS[key]} × {hrs}h</span>
-                      <span style={{ fontWeight: 700 }}>{total}h manual</span>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ROI / Savings Panel — Collapsible */}
+          {roi && (
+            <div className={`ba-roi ${roiOpen ? "ba-roi--open" : ""}`}>
+              <button
+                className="ba-roi__toggle"
+                onClick={() => setRoiOpen(!roiOpen)}
+                type="button"
+              >
+                <span className="ba-roi__toggle-icon">{roiOpen ? "▾" : "▸"}</span>
+                <span className="ba-roi__title">💰 ROI — Build Agent Savings</span>
+                <span className="ba-roi__toggle-preview">
+                  {roi.savedHours.toFixed(1)}h saved · {roi.savingsPercent.toFixed(0)}%
+                </span>
+              </button>
+              {roiOpen && (
+                <div className="ba-roi__body">
+                  <div className="ba-roi__header">
+                    <button
+                      className="ba-scan-btn"
+                      onClick={() => setEditingEstimates(!editingEstimates)}
+                      type="button"
+                      style={{ fontSize: "0.75rem", padding: "0.375rem 1rem" }}
+                    >
+                      {editingEstimates ? "Cancel" : "Edit Estimates"}
+                    </button>
+                  </div>
+                  {editingEstimates && (
+                    <SettingsEditor
+                      title="Partner Hour Estimates"
+                      values={estimates as unknown as Record<string, number>}
+                      labels={Object.fromEntries(
+                        ALL_COMPOSITION_KEYS.map((k) => [k, `${COMPONENT_LABELS[k]} (hrs)`])
+                      )}
+                      onSave={handleSaveEstimates}
+                      onCancel={() => setEditingEstimates(false)}
+                    />
+                  )}
+                  <div className="ba-roi__savings">
+                    <div>
+                      <div className="ba-roi__savings-value">{roi.savedHours.toFixed(1)}h saved</div>
+                      <div className="ba-roi__savings-label">Time Savings</div>
                     </div>
-                  );
-                })}
-              </div>
+                    <div className="ba-roi__savings-percent">{roi.savingsPercent.toFixed(0)}%</div>
+                  </div>
+                  <div className="ba-roi__comparison">
+                    <div className="ba-roi__metric">
+                      <div className="ba-roi__metric-value" style={{ color: "#dc2626" }}>{roi.manualHours}h</div>
+                      <div className="ba-roi__metric-label">Manual Estimate</div>
+                    </div>
+                    <div className="ba-roi__metric">
+                      <div className="ba-roi__metric-value" style={{ color: "#059669" }}>
+                        {Math.floor(roi.buildAgentHours)}h {Math.round((roi.buildAgentHours % 1) * 60)}m
+                      </div>
+                      <div className="ba-roi__metric-label">Build Agent Time</div>
+                    </div>
+                  </div>
+                  <div className="ba-roi__breakdown">
+                    {ALL_COMPOSITION_KEYS.map((key) => {
+                      const count = composition[key].length;
+                      const hrs = estimates[key];
+                      const total = count * hrs;
+                      if (count === 0) return null;
+                      return (
+                        <div className="ba-roi__breakdown-row" key={key}>
+                          <span>{count} {COMPONENT_LABELS[key]} × {hrs}h</span>
+                          <span style={{ fontWeight: 700 }}>{total}h manual</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
       )}
 
+      {/* Conversations Timeline */}
       <div className="ba-section">
         <h2 className="ba-section__title">Conversations Timeline</h2>
         <DataTable

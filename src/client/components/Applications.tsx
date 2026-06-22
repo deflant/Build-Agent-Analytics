@@ -4,7 +4,9 @@ import {
   fetchConversations,
   fetchAllMessages,
   fetchAllCheckpoints,
-  fetchAppNames,
+  fetchAppDetails,
+  fetchTableCount,
+  fetchDistinctCount,
 } from "../services/api.ts";
 import DataTable from "./DataTable.tsx";
 import type { Column } from "./DataTable.tsx";
@@ -17,6 +19,7 @@ interface ApplicationsProps {
 interface AppStat {
   id: string;
   name: string;
+  description: string;
   conversations: number;
   messages: number;
   checkpoints: number;
@@ -42,14 +45,63 @@ export default function Applications({ onNavigate }: ApplicationsProps) {
   const [apps, setApps] = useState<AppStat[]>([]);
   const [favorites, setFavorites] = useState<Set<string>>(loadFavorites);
   const [loading, setLoading] = useState(true);
-  const [totalConversations, setTotalConversations] = useState(0);
-  const [totalMessages, setTotalMessages] = useState(0);
-  const [totalCheckpoints, setTotalCheckpoints] = useState(0);
+
+  // KPI counts — sourced from the Aggregate API for accurate platform data
+  const [kpiConversations, setKpiConversations] = useState<number>(0);
+  const [kpiMessages, setKpiMessages] = useState<number>(0);
+  const [kpiApps, setKpiApps] = useState<number>(0);
+  const [kpiCheckpoints, setKpiCheckpoints] = useState<number>(0);
+  const [kpiLoading, setKpiLoading] = useState(true);
+
   const [sortKey, setSortKey] = useState<string>("lastActivity");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
-    loadData();
+    loadKpis();
+    loadTableData();
+  }, []);
+
+  /** Load KPI counts from the Aggregate (Stats) API — fast and accurate */
+  async function loadKpis() {
+    setKpiLoading(true);
+    try {
+      const [convos, msgs, apps, chks] = await Promise.all([
+        fetchTableCount("sn_build_agent_conversation"),
+        fetchTableCount("sn_build_agent_message"),
+        fetchDistinctCount("sn_build_agent_conversation", "application_id", "application_idISNOTEMPTY"),
+        fetchTableCount("sn_build_agent_checkpoint"),
+      ]);
+      setKpiConversations(convos);
+      setKpiMessages(msgs);
+      setKpiApps(apps);
+      setKpiCheckpoints(chks);
+    } catch (e) {
+      console.error("KPI load error:", e);
+    } finally {
+      setKpiLoading(false);
+    }
+  }
+
+  /** Individual refresh handlers for each KPI card */
+  const refreshConversations = useCallback(async () => {
+    const count = await fetchTableCount("sn_build_agent_conversation");
+    setKpiConversations(count);
+  }, []);
+
+  const refreshMessages = useCallback(async () => {
+    const count = await fetchTableCount("sn_build_agent_message");
+    setKpiMessages(count);
+  }, []);
+
+  const refreshApps = useCallback(async () => {
+    const count = await fetchDistinctCount("sn_build_agent_conversation", "application_id", "application_idISNOTEMPTY");
+    setKpiApps(count);
+  }, []);
+
+  const refreshCheckpoints = useCallback(async () => {
+    const count = await fetchTableCount("sn_build_agent_checkpoint");
+    setKpiCheckpoints(count);
   }, []);
 
   const toggleFavorite = useCallback((appId: string, e: React.MouseEvent) => {
@@ -66,17 +118,14 @@ export default function Applications({ onNavigate }: ApplicationsProps) {
     });
   }, []);
 
-  async function loadData() {
+  /** Load full table data for the DataTable (per-app breakdown) */
+  async function loadTableData() {
     try {
       const [convos, msgs, chks] = await Promise.all([
         fetchConversations("ORDERBYDESClast_message_at"),
         fetchAllMessages(),
         fetchAllCheckpoints(),
       ]);
-
-      setTotalConversations(convos.length);
-      setTotalMessages(msgs.length);
-      setTotalCheckpoints(chks.length);
 
       const msgByConvo = new Map<string, number>();
       msgs.forEach((m: any) => {
@@ -92,7 +141,6 @@ export default function Applications({ onNavigate }: ApplicationsProps) {
 
       // Build preliminary app map
       const appMap = new Map<string, AppStat>();
-      const missingNameIds: string[] = [];
       const storedFavorites = loadFavorites();
 
       convos.forEach((c: any) => {
@@ -103,6 +151,7 @@ export default function Applications({ onNavigate }: ApplicationsProps) {
         const existing = appMap.get(appId) || {
           id: appId,
           name: existingName || "",
+          description: "",
           conversations: 0,
           messages: 0,
           checkpoints: 0,
@@ -122,16 +171,16 @@ export default function Applications({ onNavigate }: ApplicationsProps) {
         appMap.set(appId, existing);
       });
 
-      // Resolve missing app names from sys_app
-      appMap.forEach((stat, appId) => {
-        if (!stat.name) missingNameIds.push(appId);
-      });
-
-      if (missingNameIds.length > 0) {
-        const resolvedNames = await fetchAppNames(missingNameIds);
-        resolvedNames.forEach((name, id) => {
+      // Resolve app details (name + description) from sys_app for ALL apps
+      const allAppIds = Array.from(appMap.keys());
+      if (allAppIds.length > 0) {
+        const resolvedDetails = await fetchAppDetails(allAppIds);
+        resolvedDetails.forEach((info, id) => {
           const stat = appMap.get(id);
-          if (stat) stat.name = name;
+          if (stat) {
+            if (!stat.name && info.name) stat.name = info.name;
+            stat.description = info.description;
+          }
         });
       }
 
@@ -176,7 +225,18 @@ export default function Applications({ onNavigate }: ApplicationsProps) {
     return sortDir === "asc" ? comparison : -comparison;
   });
 
-  if (loading) return <div className="ba-loading">Loading applications...</div>;
+  // Apply search filter on name and description
+  const filteredApps = searchQuery.trim()
+    ? sortedApps.filter((app) => {
+        const q = searchQuery.toLowerCase();
+        return (
+          app.name.toLowerCase().includes(q) ||
+          app.description.toLowerCase().includes(q)
+        );
+      })
+    : sortedApps;
+
+  if (loading && kpiLoading) return <div className="ba-loading">Loading applications...</div>;
 
   const columns: Column[] = [
     {
@@ -207,16 +267,57 @@ export default function Applications({ onNavigate }: ApplicationsProps) {
         All applications built with Build Agent — click ★ to mark favorites, click a row to explore.
       </p>
       <div className="ba-kpi-row">
-        <KpiCard title="Conversations" value={totalConversations} />
-        <KpiCard title="Messages" value={totalMessages} />
-        <KpiCard title="Apps Managed" value={apps.length} />
-        <KpiCard title="Checkpoints" value={totalCheckpoints} />
+        <KpiCard
+          title="Conversations"
+          value={kpiConversations}
+          loading={kpiLoading}
+          onRefresh={refreshConversations}
+        />
+        <KpiCard
+          title="Messages"
+          value={kpiMessages}
+          loading={kpiLoading}
+          onRefresh={refreshMessages}
+        />
+        <KpiCard
+          title="Apps Managed"
+          value={kpiApps}
+          loading={kpiLoading}
+          onRefresh={refreshApps}
+        />
+        <KpiCard
+          title="Checkpoints"
+          value={kpiCheckpoints}
+          loading={kpiLoading}
+          onRefresh={refreshCheckpoints}
+        />
+      </div>
+      <div className="ba-search">
+        <span className="ba-search__icon">🔍</span>
+        <input
+          className="ba-search__input"
+          type="text"
+          placeholder="Search by name or description..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          aria-label="Search applications"
+        />
+        {searchQuery && (
+          <button
+            className="ba-search__clear"
+            onClick={() => setSearchQuery("")}
+            type="button"
+            aria-label="Clear search"
+          >
+            ✕
+          </button>
+        )}
       </div>
       <DataTable
         columns={columns}
-        rows={sortedApps}
+        rows={filteredApps}
         onRowClick={(row) => onNavigate("app-detail", row.id)}
-        emptyMessage="No applications found"
+        emptyMessage={searchQuery ? "No applications match your search" : "No applications found"}
         defaultSort={{ key: "lastActivity", direction: "desc" }}
         onSort={handleSort}
       />

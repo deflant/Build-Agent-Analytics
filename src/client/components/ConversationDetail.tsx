@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { display, value, parseMessageContent, senderLabel, countMessagesBySender } from "../utils/fields.ts";
+import type { ToolDetails } from "../utils/fields.ts";
 import { fetchConversation, fetchMessages, fetchCheckpoints } from "../services/api.ts";
 import { analyzeConversation, analyzeMessage, formatEstimate, formatTokenCount } from "../utils/tokenEstimation.ts";
 import type { ConversationTokenUsage, MessageTokenInfo } from "../utils/tokenEstimation.ts";
@@ -15,7 +16,7 @@ interface ConversationDetailProps {
 /** Represents a grouped block of behind-the-scenes messages */
 interface BehindTheScenesBlock {
   type: "behind-the-scenes";
-  messages: Array<{ sender: string; text: string; toolName?: string; tokenInfo?: MessageTokenInfo | null }>;
+  messages: Array<{ sender: string; text: string; toolName?: string; tokenInfo?: MessageTokenInfo | null; toolDetails?: ToolDetails }>;
 }
 
 /** Represents a visible chat message (user or assistant) */
@@ -62,6 +63,7 @@ function groupMessages(rawMessages: any[]): ConversationItem[] {
         text: parsed.text,
         toolName: parsed.toolName,
         tokenInfo,
+        toolDetails: parsed.toolDetails,
       });
     }
   }
@@ -76,6 +78,33 @@ function TokenBadge({ info }: { info: MessageTokenInfo | null | undefined }) {
     <span className={`token-badge token-badge--${info.bucket}`}>
       {info.bucket}: ~{formatTokenCount(info.tokens)}
     </span>
+  );
+}
+
+/** Copy message button component */
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy message:", err);
+    }
+  }
+
+  return (
+    <button
+      className={`chat-copy-btn ${copied ? "chat-copy-btn--copied" : ""}`}
+      onClick={handleCopy}
+      type="button"
+      title={copied ? "Copied!" : "Copy message"}
+      aria-label={copied ? "Copied!" : "Copy message"}
+    >
+      {copied ? "✓" : "📋"}
+    </button>
   );
 }
 
@@ -109,6 +138,321 @@ function TokenUsageSummary({ usage }: { usage: ConversationTokenUsage }) {
   );
 }
 
+/** Format duration in ms to human readable */
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+  const mins = Math.floor(ms / 60000);
+  const secs = Math.round((ms % 60000) / 1000);
+  return `${mins}m ${secs}s`;
+}
+
+/** Get the category for a tool to decide what to show */
+function getToolCategory(name: string): "filesystem" | "query" | "build" | "docs" | "planning" | "agent" | "other" {
+  if (name.startsWith("fs_") || name === "local_search") return "filesystem";
+  if (["run_query", "keyword_search", "semantic_search", "get_table_schema"].includes(name)) return "query";
+  if (["build", "install", "run_diagnostics", "install_dependencies", "ui_diagnostics"].includes(name)) return "build";
+  if (["explain_fluent_doc", "search_fluent_docs", "get_knowledge_source", "package_docs"].includes(name)) return "docs";
+  if (["planning", "interview"].includes(name)) return "planning";
+  if (name === "agent") return "agent";
+  return "other";
+}
+
+/** Get key input fields to display based on tool type */
+function getToolInputDisplay(name: string, input: Record<string, any>): Array<{ label: string; value: string; mono?: boolean }> {
+  const fields: Array<{ label: string; value: string; mono?: boolean }> = [];
+  const category = getToolCategory(name);
+
+  switch (category) {
+    case "filesystem":
+      if (input.path) fields.push({ label: "Path", value: input.path, mono: true });
+      if (input.sourcePath) fields.push({ label: "Source", value: input.sourcePath, mono: true });
+      if (input.destinationPath) fields.push({ label: "Dest", value: input.destinationPath, mono: true });
+      if (input.oldPath) fields.push({ label: "From", value: input.oldPath, mono: true });
+      if (input.newPath) fields.push({ label: "To", value: input.newPath, mono: true });
+      if (input.pattern) fields.push({ label: "Pattern", value: input.pattern, mono: true });
+      if (input.search) fields.push({ label: "Search", value: truncateStr(input.search, 80), mono: true });
+      if (input.replace !== undefined) fields.push({ label: "Replace", value: truncateStr(input.replace, 80), mono: true });
+      if (input.glob) fields.push({ label: "Glob", value: input.glob, mono: true });
+      if (input.search_string) fields.push({ label: "Search", value: input.search_string });
+      if (input.maxDepth) fields.push({ label: "Depth", value: String(input.maxDepth) });
+      break;
+    case "query":
+      if (input.table) fields.push({ label: "Table", value: input.table, mono: true });
+      if (input.encodedQuery) fields.push({ label: "Query", value: input.encodedQuery, mono: true });
+      if (input.query) fields.push({ label: "Query", value: input.query });
+      if (input.limit) fields.push({ label: "Limit", value: String(input.limit) });
+      if (input.tables) fields.push({ label: "Tables", value: input.tables, mono: true });
+      if (input.contentMode) fields.push({ label: "Mode", value: input.contentMode });
+      break;
+    case "build":
+      if (input.path && input.path !== ".") fields.push({ label: "Path", value: input.path, mono: true });
+      if (input.changeSummary) fields.push({ label: "Summary", value: truncateStr(input.changeSummary, 120) });
+      if (input.files) fields.push({ label: "Files", value: Array.isArray(input.files) ? input.files.join(", ") : input.files, mono: true });
+      if (input.tableName) fields.push({ label: "Table", value: input.tableName, mono: true });
+      break;
+    case "docs":
+      if (input.name) fields.push({ label: "Topic", value: input.name });
+      if (input.query) fields.push({ label: "Query", value: input.query });
+      if (input.packageName) fields.push({ label: "Package", value: input.packageName, mono: true });
+      if (input.apiType) fields.push({ label: "Types", value: Array.isArray(input.apiType) ? input.apiType.join(", ") : input.apiType });
+      break;
+    case "planning":
+      if (input.action) fields.push({ label: "Action", value: input.action });
+      if (input.title) fields.push({ label: "Title", value: input.title });
+      if (input.question) fields.push({ label: "Question", value: truncateStr(input.question, 100) });
+      if (input.step) fields.push({ label: "Step", value: String(input.step) });
+      if (input.steps && Array.isArray(input.steps)) fields.push({ label: "Steps", value: `${input.steps.length} steps` });
+      break;
+    case "agent":
+      if (input.type) fields.push({ label: "Type", value: input.type });
+      if (input.name) fields.push({ label: "Name", value: input.name });
+      if (input.prompt) fields.push({ label: "Prompt", value: truncateStr(input.prompt, 100) });
+      break;
+    default:
+      // For unknown tools, show all keys as-is (up to 5)
+      Object.entries(input).slice(0, 5).forEach(([k, v]) => {
+        const val = typeof v === "string" ? truncateStr(v, 80) : JSON.stringify(v).slice(0, 80);
+        fields.push({ label: k, value: val });
+      });
+  }
+  return fields;
+}
+
+function truncateStr(s: string, max: number): string {
+  if (s.length <= max) return s;
+  return s.slice(0, max) + "…";
+}
+
+/** Detect if a string is valid JSON */
+function isJsonString(s: string): boolean {
+  const trimmed = s.trim();
+  if ((!trimmed.startsWith("{") && !trimmed.startsWith("[")) || (!trimmed.endsWith("}") && !trimmed.endsWith("]"))) {
+    return false;
+  }
+  try {
+    JSON.parse(trimmed);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Collapsible JSON tree node */
+function JsonNode({ keyName, value: val, depth }: { keyName?: string; value: any; depth: number }) {
+  const [collapsed, setCollapsed] = useState(depth > 2);
+
+  if (val === null) {
+    return (
+      <div className="json-tree__leaf" style={{ paddingLeft: `${depth * 16}px` }}>
+        {keyName !== undefined && <span className="json-tree__key">{keyName}: </span>}
+        <span className="json-tree__null">null</span>
+      </div>
+    );
+  }
+
+  if (typeof val === "boolean") {
+    return (
+      <div className="json-tree__leaf" style={{ paddingLeft: `${depth * 16}px` }}>
+        {keyName !== undefined && <span className="json-tree__key">{keyName}: </span>}
+        <span className="json-tree__boolean">{val ? "true" : "false"}</span>
+      </div>
+    );
+  }
+
+  if (typeof val === "number") {
+    return (
+      <div className="json-tree__leaf" style={{ paddingLeft: `${depth * 16}px` }}>
+        {keyName !== undefined && <span className="json-tree__key">{keyName}: </span>}
+        <span className="json-tree__number">{val}</span>
+      </div>
+    );
+  }
+
+  if (typeof val === "string") {
+    const display = val.length > 200 ? val.slice(0, 200) + "…" : val;
+    return (
+      <div className="json-tree__leaf" style={{ paddingLeft: `${depth * 16}px` }}>
+        {keyName !== undefined && <span className="json-tree__key">{keyName}: </span>}
+        <span className="json-tree__string">"{display}"</span>
+      </div>
+    );
+  }
+
+  if (Array.isArray(val)) {
+    const count = val.length;
+    return (
+      <div className="json-tree__node" style={{ paddingLeft: `${depth * 16}px` }}>
+        <button className="json-tree__toggle" onClick={() => setCollapsed(!collapsed)} type="button">
+          <span className="json-tree__arrow">{collapsed ? "▸" : "▾"}</span>
+          {keyName !== undefined && <span className="json-tree__key">{keyName}: </span>}
+          <span className="json-tree__bracket">[</span>
+          {collapsed && <span className="json-tree__preview">{count} items</span>}
+          {collapsed && <span className="json-tree__bracket">]</span>}
+        </button>
+        {!collapsed && (
+          <div className="json-tree__children">
+            {val.map((item, i) => (
+              <JsonNode key={i} keyName={String(i)} value={item} depth={depth + 1} />
+            ))}
+            <div className="json-tree__closing" style={{ paddingLeft: `${depth * 16}px` }}>
+              <span className="json-tree__bracket">]</span>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (typeof val === "object") {
+    const keys = Object.keys(val);
+    return (
+      <div className="json-tree__node" style={{ paddingLeft: `${depth * 16}px` }}>
+        <button className="json-tree__toggle" onClick={() => setCollapsed(!collapsed)} type="button">
+          <span className="json-tree__arrow">{collapsed ? "▸" : "▾"}</span>
+          {keyName !== undefined && <span className="json-tree__key">{keyName}: </span>}
+          <span className="json-tree__bracket">{"{"}</span>
+          {collapsed && <span className="json-tree__preview">{keys.length} keys</span>}
+          {collapsed && <span className="json-tree__bracket">{"}"}</span>}
+        </button>
+        {!collapsed && (
+          <div className="json-tree__children">
+            {keys.map((k) => (
+              <JsonNode key={k} keyName={k} value={val[k]} depth={depth + 1} />
+            ))}
+            <div className="json-tree__closing" style={{ paddingLeft: `${depth * 16}px` }}>
+              <span className="json-tree__bracket">{"}"}</span>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="json-tree__leaf" style={{ paddingLeft: `${depth * 16}px` }}>
+      {keyName !== undefined && <span className="json-tree__key">{keyName}: </span>}
+      <span>{String(val)}</span>
+    </div>
+  );
+}
+
+/** Modal for displaying tool result content */
+function ToolResultModal({ toolName, result, onClose }: { toolName: string; result: string; onClose: () => void }) {
+  const isJson = isJsonString(result);
+  let parsedJson: any = null;
+  if (isJson) {
+    try { parsedJson = JSON.parse(result.trim()); } catch { /* noop */ }
+  }
+
+  // Close on Escape key
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, [onClose]);
+
+  return (
+    <div className="ba-modal-overlay" onClick={onClose}>
+      <div className="tool-result-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="tool-result-modal__header">
+          <span className="tool-result-modal__icon">{isJson ? "🔖" : "📄"}</span>
+          <span className="tool-result-modal__title">{toolName}</span>
+          <span className="tool-result-modal__badge">{isJson ? "JSON" : "Text"}</span>
+          <button className="ba-modal__close" onClick={onClose} type="button" aria-label="Close">✕</button>
+        </div>
+        <div className="tool-result-modal__body">
+          {isJson && parsedJson !== null ? (
+            <div className="json-tree">
+              <JsonNode value={parsedJson} depth={0} />
+            </div>
+          ) : (
+            <div className="tool-result-modal__markdown">
+              <MarkdownRenderer content={"```\n" + result + "\n```"} />
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Render tool details: inputs, status, duration, modal result */
+function ToolDetailsView({ details }: { details: ToolDetails }) {
+  const [modalOpen, setModalOpen] = useState(false);
+  const { toolActualName, toolInput, success, duration, result } = details;
+
+  const inputFields = getToolInputDisplay(toolActualName, toolInput);
+  const category = getToolCategory(toolActualName);
+
+  // Category-based icons
+  const categoryIcons: Record<string, string> = {
+    filesystem: "📁",
+    query: "🔍",
+    build: "🏗️",
+    docs: "📖",
+    planning: "📋",
+    agent: "🤖",
+    other: "⚡",
+  };
+
+  const resultLength = result?.length || 0;
+
+  return (
+    <div className={`tool-details ${!success ? "tool-details--failed" : ""}`}>
+      {/* Header row: status + name + duration */}
+      <div className="tool-details__header">
+        <span className={`tool-details__status ${success ? "tool-details__status--ok" : "tool-details__status--fail"}`}>
+          {success ? "✓" : "✗"}
+        </span>
+        <span className="tool-details__category-icon">{categoryIcons[category]}</span>
+        <code className="tool-details__name">{toolActualName}</code>
+        {duration > 0 && (
+          <span className="tool-details__duration">{formatDuration(duration)}</span>
+        )}
+      </div>
+
+      {/* Input parameters */}
+      {inputFields.length > 0 && (
+        <div className="tool-details__inputs">
+          {inputFields.map((f, i) => (
+            <div key={i} className="tool-details__param">
+              <span className="tool-details__param-label">{f.label}:</span>
+              {f.mono ? (
+                <code className="tool-details__param-value tool-details__param-value--mono">{f.value}</code>
+              ) : (
+                <span className="tool-details__param-value">{f.value}</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Result — opens modal */}
+      {result && resultLength > 0 && (
+        <div className="tool-details__result">
+          <button
+            className="tool-details__result-toggle"
+            onClick={() => setModalOpen(true)}
+            type="button"
+          >
+            <span>📋</span>
+            <span>View Result</span>
+            <span className="tool-details__result-size">({resultLength > 1024 ? `${(resultLength / 1024).toFixed(1)}KB` : `${resultLength} chars`})</span>
+          </button>
+        </div>
+      )}
+
+      {/* Modal */}
+      {modalOpen && result && (
+        <ToolResultModal toolName={toolActualName} result={result} onClose={() => setModalOpen(false)} />
+      )}
+    </div>
+  );
+}
+
 /** Collapsible "behind the scenes" block */
 function BehindTheScenes({ messages }: { messages: BehindTheScenesBlock["messages"] }) {
   const [expanded, setExpanded] = useState(false);
@@ -118,6 +462,10 @@ function BehindTheScenes({ messages }: { messages: BehindTheScenesBlock["message
 
   // Sum tokens in this block
   const blockTokens = messages.reduce((sum, m) => sum + (m.tokenInfo?.tokens || 0), 0);
+
+  // Sum durations from tool details
+  const totalDuration = messages.reduce((sum, m) => sum + (m.toolDetails?.duration || 0), 0);
+  const failedTools = messages.filter(m => m.toolDetails && !m.toolDetails.success).length;
 
   let summary = "";
   if (thinkingCount > 0 && toolCount > 0) {
@@ -139,6 +487,12 @@ function BehindTheScenes({ messages }: { messages: BehindTheScenesBlock["message
         <span className="chat-bts__icon">{expanded ? "▾" : "▸"}</span>
         <span className="chat-bts__label">⚙️ Agent Processing</span>
         <span className="chat-bts__summary">{summary}</span>
+        {failedTools > 0 && (
+          <span className="chat-bts__failures">⚠ {failedTools} failed</span>
+        )}
+        {totalDuration > 0 && (
+          <span className="chat-bts__duration">{formatDuration(totalDuration)}</span>
+        )}
         {blockTokens > 0 && (
           <span className="chat-bts__tokens">~{formatTokenCount(blockTokens)} tok</span>
         )}
@@ -157,7 +511,8 @@ function BehindTheScenes({ messages }: { messages: BehindTheScenesBlock["message
                     <TokenBadge info={m.tokenInfo} />
                   )}
                 </span>
-                {m.text && (
+                {m.toolDetails && <ToolDetailsView details={m.toolDetails} />}
+                {!m.toolDetails && m.text && (
                   <p className="chat-bts__item-text">{m.text}</p>
                 )}
               </div>
@@ -166,6 +521,25 @@ function BehindTheScenes({ messages }: { messages: BehindTheScenesBlock["message
         </div>
       )}
     </div>
+  );
+}
+
+/** Highlight matching text within a string */
+function highlightText(text: string, query: string): React.ReactNode {
+  if (!query.trim()) return text;
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const regex = new RegExp(`(${escaped})`, "gi");
+  const parts = text.split(regex);
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.toLowerCase() === query.toLowerCase() ? (
+          <mark key={i} className="ba-highlight">{part}</mark>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </>
   );
 }
 
@@ -180,6 +554,7 @@ export default function ConversationDetail({
   const [assistantCount, setAssistantCount] = useState(0);
   const [tokenUsage, setTokenUsage] = useState<ConversationTokenUsage | null>(null);
   const [loading, setLoading] = useState(true);
+  const [messageSearch, setMessageSearch] = useState("");
 
   useEffect(() => {
     loadData();
@@ -276,8 +651,43 @@ export default function ConversationDetail({
       {/* Chat-style conversation */}
       <div className="ba-section">
         <h2 className="ba-section__title">Conversation</h2>
+        <div className="ba-search">
+          <span className="ba-search__icon">🔍</span>
+          <input
+            className="ba-search__input"
+            type="text"
+            placeholder="Search messages..."
+            value={messageSearch}
+            onChange={(e) => setMessageSearch(e.target.value)}
+            aria-label="Search messages"
+          />
+          {messageSearch && (
+            <button
+              className="ba-search__clear"
+              onClick={() => setMessageSearch("")}
+              type="button"
+              aria-label="Clear search"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+        {messageSearch.trim() && (
+          <div className="ba-search__results-count">
+            {conversationItems.filter((item) => {
+              if (item.type === "behind-the-scenes") return false;
+              return item.text?.toLowerCase().includes(messageSearch.toLowerCase());
+            }).length} message(s) found
+          </div>
+        )}
         <div className="chat-container">
           {conversationItems.map((item, idx) => {
+            // When searching, filter to only show matching user/assistant messages
+            if (messageSearch.trim()) {
+              if (item.type === "behind-the-scenes") return null;
+              if (!item.text?.toLowerCase().includes(messageSearch.toLowerCase())) return null;
+            }
+
             if (item.type === "behind-the-scenes") {
               return <BehindTheScenes key={idx} messages={item.messages} />;
             }
@@ -285,8 +695,15 @@ export default function ConversationDetail({
               return (
                 <div key={idx} className="chat-row chat-row--user">
                   <div className="chat-bubble chat-bubble--user">
-                    <p className="chat-bubble__text">{item.text || <em>Empty message</em>}</p>
-                    <TokenBadge info={item.tokenInfo} />
+                    <p className="chat-bubble__text">
+                      {messageSearch.trim()
+                        ? highlightText(item.text || "", messageSearch)
+                        : (item.text || <em>Empty message</em>)}
+                    </p>
+                    <div className="chat-bubble__footer">
+                      <TokenBadge info={item.tokenInfo} />
+                      {item.text && <CopyButton text={item.text} />}
+                    </div>
                   </div>
                 </div>
               );
@@ -296,11 +713,16 @@ export default function ConversationDetail({
               <div key={idx} className="chat-row chat-row--assistant">
                 <div className="chat-bubble chat-bubble--assistant">
                   {item.text ? (
-                    <MarkdownRenderer content={item.text} />
+                    messageSearch.trim()
+                      ? <div className="chat-bubble__text">{highlightText(item.text, messageSearch)}</div>
+                      : <MarkdownRenderer content={item.text} />
                   ) : (
                     <p className="chat-bubble__text"><em>Empty message</em></p>
                   )}
-                  <TokenBadge info={item.tokenInfo} />
+                  <div className="chat-bubble__footer">
+                    <TokenBadge info={item.tokenInfo} />
+                    {item.text && <CopyButton text={item.text} />}
+                  </div>
                 </div>
               </div>
             );
