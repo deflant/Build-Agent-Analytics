@@ -23,6 +23,13 @@ export interface ToolDetails {
   result: string;
 }
 
+export interface FileAttachment {
+  url: string;
+  name: string;
+  type?: string;
+  size?: number;
+}
+
 export interface ParsedMessage {
   id: string;
   sender: MessageSender;
@@ -30,6 +37,8 @@ export interface ParsedMessage {
   toolName?: string;
   complete?: boolean;
   toolDetails?: ToolDetails;
+  images?: Array<{ url: string }>;
+  files?: FileAttachment[];
 }
 
 /**
@@ -47,6 +56,8 @@ export function parseMessageContent(contentField: any): ParsedMessage | null {
       text: parsed.text || "",
       toolName: parsed.toolName,
       complete: parsed.complete,
+      images: Array.isArray(parsed.images) ? parsed.images : undefined,
+      files: Array.isArray(parsed.files) ? parsed.files : undefined,
     };
 
     // Extract full tool details for tool messages

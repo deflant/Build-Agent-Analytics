@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { display, value, parseMessageContent, senderLabel, countMessagesBySender } from "../utils/fields.ts";
-import type { ToolDetails } from "../utils/fields.ts";
+import type { ToolDetails, FileAttachment } from "../utils/fields.ts";
 import { fetchConversation, fetchMessages, fetchCheckpoints } from "../services/api.ts";
 import { analyzeConversation, analyzeMessage, formatEstimate, formatTokenCount } from "../utils/tokenEstimation.ts";
 import type { ConversationTokenUsage, MessageTokenInfo } from "../utils/tokenEstimation.ts";
@@ -24,6 +25,8 @@ interface ChatBubble {
   type: "user" | "assistant";
   text: string;
   tokenInfo?: MessageTokenInfo | null;
+  images?: Array<{ url: string }>;
+  files?: FileAttachment[];
 }
 
 type ConversationItem = BehindTheScenesBlock | ChatBubble;
@@ -52,7 +55,7 @@ function groupMessages(rawMessages: any[]): ConversationItem[] {
 
     if (parsed.sender === "user") {
       flushBTS();
-      items.push({ type: "user", text: parsed.text, tokenInfo });
+      items.push({ type: "user", text: parsed.text, tokenInfo, images: parsed.images, files: parsed.files });
     } else if (parsed.sender === "assistant") {
       flushBTS();
       items.push({ type: "assistant", text: parsed.text, tokenInfo });
@@ -337,7 +340,7 @@ function JsonNode({ keyName, value: val, depth }: { keyName?: string; value: any
   );
 }
 
-/** Modal for displaying tool result content */
+/** Modal for displaying tool result content — portalled to document.body for true full-page overlay */
 function ToolResultModal({ toolName, result, onClose }: { toolName: string; result: string; onClose: () => void }) {
   const isJson = isJsonString(result);
   let parsedJson: any = null;
@@ -354,7 +357,13 @@ function ToolResultModal({ toolName, result, onClose }: { toolName: string; resu
     return () => document.removeEventListener("keydown", handleKey);
   }, [onClose]);
 
-  return (
+  // Prevent body scroll while modal is open
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = ""; };
+  }, []);
+
+  return createPortal(
     <div className="ba-modal-overlay" onClick={onClose}>
       <div className="tool-result-modal" onClick={(e) => e.stopPropagation()}>
         <div className="tool-result-modal__header">
@@ -375,7 +384,8 @@ function ToolResultModal({ toolName, result, onClose }: { toolName: string; resu
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -519,6 +529,169 @@ function BehindTheScenes({ messages }: { messages: BehindTheScenesBlock["message
             </div>
           ))}
         </div>
+      )}
+    </div>
+  );
+}
+
+/** Image Modal — portalled to document.body for full-page overlay */
+function ImageModal({ imageUrl, onClose }: { imageUrl: string; onClose: () => void }) {
+  // Close on Escape key
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, [onClose]);
+
+  // Prevent body scroll while modal is open
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = ""; };
+  }, []);
+
+  return createPortal(
+    <div className="ba-modal-overlay" onClick={onClose}>
+      <div className="image-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="image-modal__header">
+          <span className="image-modal__icon">🖼️</span>
+          <span className="image-modal__title">Image Attachment</span>
+          <button className="ba-modal__close" onClick={onClose} type="button" aria-label="Close">✕</button>
+        </div>
+        <div className="image-modal__body">
+          <img
+            className="image-modal__img"
+            src={imageUrl}
+            alt="Attached image"
+          />
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+/** Get file extension icon and color based on file type */
+function getFileExtensionInfo(fileName: string): { icon: string; color: string; extension: string } {
+  const ext = fileName.split(".").pop()?.toLowerCase() || "";
+  const map: Record<string, { icon: string; color: string }> = {
+    pdf: { icon: "📕", color: "#e74c3c" },
+    doc: { icon: "📘", color: "#2b5797" },
+    docx: { icon: "📘", color: "#2b5797" },
+    xls: { icon: "📗", color: "#217346" },
+    xlsx: { icon: "📗", color: "#217346" },
+    csv: { icon: "📗", color: "#217346" },
+    ppt: { icon: "📙", color: "#d24726" },
+    pptx: { icon: "📙", color: "#d24726" },
+    txt: { icon: "📄", color: "#6c757d" },
+    zip: { icon: "🗜️", color: "#f39c12" },
+    rar: { icon: "🗜️", color: "#f39c12" },
+    "7z": { icon: "🗜️", color: "#f39c12" },
+    json: { icon: "📋", color: "#f1c40f" },
+    xml: { icon: "📋", color: "#e67e22" },
+    html: { icon: "🌐", color: "#e44d26" },
+    css: { icon: "🎨", color: "#264de4" },
+    js: { icon: "⚡", color: "#f7df1e" },
+    ts: { icon: "⚡", color: "#3178c6" },
+    py: { icon: "🐍", color: "#3776ab" },
+    java: { icon: "☕", color: "#007396" },
+    mp3: { icon: "🎵", color: "#1db954" },
+    wav: { icon: "🎵", color: "#1db954" },
+    mp4: { icon: "🎬", color: "#9b59b6" },
+    avi: { icon: "🎬", color: "#9b59b6" },
+    mov: { icon: "🎬", color: "#9b59b6" },
+    svg: { icon: "🖼️", color: "#ffb13b" },
+    md: { icon: "📝", color: "#083fa1" },
+    yaml: { icon: "⚙️", color: "#cb171e" },
+    yml: { icon: "⚙️", color: "#cb171e" },
+  };
+
+  const info = map[ext] || { icon: "📎", color: "#6c757d" };
+  return { ...info, extension: ext.toUpperCase() || "FILE" };
+}
+
+/** Format file size to human readable */
+function formatFileSize(bytes?: number): string {
+  if (!bytes || bytes <= 0) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** File attachment card component — shows icon + name + download link */
+function FileAttachmentCard({ file }: { file: FileAttachment }) {
+  const { icon, color, extension } = getFileExtensionInfo(file.name);
+  const sizeLabel = formatFileSize(file.size);
+
+  return (
+    <a
+      className="file-attachment-card"
+      href={file.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      download={file.name}
+      title={`Download ${file.name}`}
+    >
+      <div className="file-attachment-card__icon" style={{ backgroundColor: color }}>
+        <span className="file-attachment-card__emoji">{icon}</span>
+        <span className="file-attachment-card__ext">{extension}</span>
+      </div>
+      <div className="file-attachment-card__info">
+        <span className="file-attachment-card__name">{file.name}</span>
+        {sizeLabel && <span className="file-attachment-card__size">{sizeLabel}</span>}
+      </div>
+      <span className="file-attachment-card__download" aria-label="Download">⬇️</span>
+    </a>
+  );
+}
+
+/** User message bubble with local state for image modal */
+function UserBubble({ text, images, files, tokenInfo, messageSearch }: {
+  text: string;
+  images?: Array<{ url: string }>;
+  files?: FileAttachment[];
+  tokenInfo?: MessageTokenInfo | null;
+  messageSearch: string;
+}) {
+  const [selectedImage, setSelectedImage] = useState<{ url: string } | null>(null);
+
+  return (
+    <div className="chat-bubble chat-bubble--user">
+      <p className="chat-bubble__text">
+        {messageSearch.trim()
+          ? highlightText(text || "", messageSearch)
+          : (text || <em>Empty message</em>)}
+      </p>
+      {images && images.length > 0 && (
+        <div className="chat-attachments">
+          {images.map((img, i) => (
+            <img
+              key={i}
+              className="chat-attachment-thumb"
+              src={img.url}
+              alt={`Attachment ${i + 1}`}
+              onClick={() => setSelectedImage(img)}
+            />
+          ))}
+        </div>
+      )}
+      {files && files.length > 0 && (
+        <div className="chat-file-attachments">
+          {files.map((file, i) => (
+            <FileAttachmentCard key={i} file={file} />
+          ))}
+        </div>
+      )}
+      <div className="chat-bubble__footer">
+        <TokenBadge info={tokenInfo} />
+        {text && <CopyButton text={text} />}
+      </div>
+      {selectedImage && (
+        <ImageModal
+          imageUrl={selectedImage.url}
+          onClose={() => setSelectedImage(null)}
+        />
       )}
     </div>
   );
@@ -694,17 +867,13 @@ export default function ConversationDetail({
             if (item.type === "user") {
               return (
                 <div key={idx} className="chat-row chat-row--user">
-                  <div className="chat-bubble chat-bubble--user">
-                    <p className="chat-bubble__text">
-                      {messageSearch.trim()
-                        ? highlightText(item.text || "", messageSearch)
-                        : (item.text || <em>Empty message</em>)}
-                    </p>
-                    <div className="chat-bubble__footer">
-                      <TokenBadge info={item.tokenInfo} />
-                      {item.text && <CopyButton text={item.text} />}
-                    </div>
-                  </div>
+                  <UserBubble
+                    text={item.text || ""}
+                    images={item.images}
+                    files={item.files}
+                    tokenInfo={item.tokenInfo}
+                    messageSearch={messageSearch}
+                  />
                 </div>
               );
             }
