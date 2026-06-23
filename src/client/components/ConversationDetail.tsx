@@ -785,13 +785,27 @@ export default function ConversationDetail({
         {backLabel}
       </button>
       <h1 className="ba-view__title">{display(conversation.title) || "Untitled"}</h1>
+      <p className="ba-view__subtitle" style={{ margin: "0.25rem 0 0.75rem 0" }}>
+        <span style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "0.375rem",
+          padding: "0.25rem 0.75rem",
+          background: "rgba(99,102,241,0.08)",
+          border: "1px solid rgba(99,102,241,0.2)",
+          borderRadius: "1rem",
+          fontSize: "0.875rem",
+          fontWeight: 500,
+          color: "#4f46e5",
+        }}>👤 {display(conversation.user)}</span>
+      </p>
       <div className="ba-detail-grid">
         <div className="ba-detail-item">
           <span className="ba-detail-item__label">Application</span>
           <span className="ba-detail-item__value">{display(conversation.application_name) || "—"}</span>
         </div>
         <div className="ba-detail-item">
-          <span className="ba-detail-item__label">User</span>
+          <span className="ba-detail-item__label">Author</span>
           <span className="ba-detail-item__value">{display(conversation.user)}</span>
         </div>
         <div className="ba-detail-item">

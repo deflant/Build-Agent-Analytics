@@ -37,6 +37,44 @@ interface ConvoWithCounts {
   tokenUsage: ConversationTokenUsage;
 }
 
+interface UserAggregate {
+  user: string;
+  conversations: number;
+  userMessages: number;
+  assistantMessages: number;
+  totalMessages: number;
+  tokens: number;
+  checkpoints: number;
+}
+
+/** Group conversations by user and compute aggregates */
+function aggregateByUser(convoData: ConvoWithCounts[]): UserAggregate[] {
+  const map = new Map<string, UserAggregate>();
+  for (const c of convoData) {
+    const user = display(c.raw.user) || "Unknown";
+    if (!map.has(user)) {
+      map.set(user, {
+        user,
+        conversations: 0,
+        userMessages: 0,
+        assistantMessages: 0,
+        totalMessages: 0,
+        tokens: 0,
+        checkpoints: 0,
+      });
+    }
+    const agg = map.get(user)!;
+    agg.conversations += 1;
+    agg.userMessages += c.userMessages;
+    agg.assistantMessages += c.assistantMessages;
+    agg.totalMessages += c.totalMessages;
+    agg.tokens += c.tokenUsage.total;
+    agg.checkpoints += c.checkpoints;
+  }
+  // Sort by total messages descending
+  return Array.from(map.values()).sort((a, b) => b.totalMessages - a.totalMessages);
+}
+
 const NOWASSIST_UNIT_COST = 25;
 
 /** Sub-component that renders a composition category tile (click opens modal) */
@@ -333,8 +371,21 @@ export default function AppDetail({ appId, onNavigate }: AppDetailProps) {
     : null;
   const totalComponents = composition ? getTotalComponentCount(composition) : 0;
 
+  // Compute user aggregates
+  const userAggregates = aggregateByUser(convoData);
+
+  const userAggColumns = [
+    { key: "user", label: "Author", render: (r: UserAggregate) => r.user },
+    { key: "conversations", label: "Conversations", render: (r: UserAggregate) => r.conversations },
+    { key: "userMessages", label: "User Msgs", render: (r: UserAggregate) => r.userMessages },
+    { key: "assistantMessages", label: "Assistant Msgs", render: (r: UserAggregate) => r.assistantMessages },
+    { key: "tokens", label: "Est. Tokens", render: (r: UserAggregate) => `~${formatTokenCount(r.tokens)}` },
+    { key: "nowAssistUnits", label: "NowAssist Units", render: (r: UserAggregate) => (r.userMessages * NOWASSIST_UNIT_COST).toLocaleString("de-DE") },
+  ];
+
   const columns = [
     { key: "title", label: "Conversation", render: (r: ConvoWithCounts) => display(r.raw.title) || "Untitled" },
+    { key: "author", label: "Author", render: (r: ConvoWithCounts) => display(r.raw.user) || "—" },
     { key: "userMessages", label: "User Msgs", render: (r: ConvoWithCounts) => r.userMessages },
     { key: "assistantMessages", label: "Assistant Msgs", render: (r: ConvoWithCounts) => r.assistantMessages },
     { key: "tokens", label: "Est. Tokens", render: (r: ConvoWithCounts) => `~${formatTokenCount(r.tokenUsage.total)}` },
@@ -373,6 +424,20 @@ export default function AppDetail({ appId, onNavigate }: AppDetailProps) {
           tooltip={`${totalUser} user messages × ${NOWASSIST_UNIT_COST} NowAssist units = ${nowAssistUnits.toLocaleString("de-DE")}`}
         />
       </div>
+
+      {/* ═══════════════════════════════════════════════════════════════════════
+          SECTION: USER AGGREGATE
+          ═══════════════════════════════════════════════════════════════════════ */}
+      {userAggregates.length > 0 && (
+        <div className="ba-section">
+          <h2 className="ba-section__title">👤 Usage by Author</h2>
+          <DataTable
+            columns={userAggColumns}
+            rows={userAggregates}
+            emptyMessage="No user data available"
+          />
+        </div>
+      )}
 
       {/* ═══════════════════════════════════════════════════════════════════════
           SECTION 1: APPLICATION SCAN
@@ -437,17 +502,16 @@ export default function AppDetail({ appId, onNavigate }: AppDetailProps) {
           </div>
 
           {/* Complexity Score Panel */}
-          <div className="ba-complexity">
+          <div className="ba-complexity" style={{ '--ba-complexity-color': complexLabel?.color } as React.CSSProperties}>
             <div className="ba-complexity__header">
-              <span className="ba-complexity__score" style={{ color: complexLabel?.color }}>{complexScore}</span>
+              <span className="ba-complexity__score">{complexScore}</span>
               <div>
-                <span className="ba-complexity__label" style={{ color: complexLabel?.color }}>{complexLabel?.label}</span>
+                <span className="ba-complexity__label">{complexLabel?.label}</span>
               </div>
               <button
-                className="ba-scan-btn"
+                className="ba-scan-btn ba-scan-btn--compact"
                 onClick={() => setEditingWeights(!editingWeights)}
                 type="button"
-                style={{ marginLeft: "auto", fontSize: "0.75rem", padding: "0.375rem 1rem" }}
               >
                 {editingWeights ? "Cancel" : "Edit Weights"}
               </button>
@@ -470,7 +534,7 @@ export default function AppDetail({ appId, onNavigate }: AppDetailProps) {
                 return (
                   <div className="ba-complexity__row" key={key}>
                     <span>{count} {COMPONENT_LABELS[key]} × {weight}</span>
-                    <span style={{ fontWeight: 700 }}>{subtotal}</span>
+                    <span className="ba-complexity__row-value">{subtotal}</span>
                   </div>
                 );
               })}
@@ -495,10 +559,9 @@ export default function AppDetail({ appId, onNavigate }: AppDetailProps) {
                 <div className="ba-roi__body">
                   <div className="ba-roi__header">
                     <button
-                      className="ba-scan-btn"
+                      className="ba-scan-btn ba-scan-btn--compact"
                       onClick={() => setEditingEstimates(!editingEstimates)}
                       type="button"
-                      style={{ fontSize: "0.75rem", padding: "0.375rem 1rem" }}
                     >
                       {editingEstimates ? "Cancel" : "Edit Estimates"}
                     </button>
@@ -523,11 +586,11 @@ export default function AppDetail({ appId, onNavigate }: AppDetailProps) {
                   </div>
                   <div className="ba-roi__comparison">
                     <div className="ba-roi__metric">
-                      <div className="ba-roi__metric-value" style={{ color: "#dc2626" }}>{roi.manualHours}h</div>
+                      <div className="ba-roi__metric-value ba-roi__metric-value--manual">{roi.manualHours}h</div>
                       <div className="ba-roi__metric-label">Manual Estimate</div>
                     </div>
                     <div className="ba-roi__metric">
-                      <div className="ba-roi__metric-value" style={{ color: "#059669" }}>
+                      <div className="ba-roi__metric-value ba-roi__metric-value--agent">
                         {Math.floor(roi.buildAgentHours)}h {Math.round((roi.buildAgentHours % 1) * 60)}m
                       </div>
                       <div className="ba-roi__metric-label">Build Agent Time</div>
@@ -542,7 +605,7 @@ export default function AppDetail({ appId, onNavigate }: AppDetailProps) {
                       return (
                         <div className="ba-roi__breakdown-row" key={key}>
                           <span>{count} {COMPONENT_LABELS[key]} × {hrs}h</span>
-                          <span style={{ fontWeight: 700 }}>{total}h manual</span>
+                          <span className="ba-roi__breakdown-value">{total}h manual</span>
                         </div>
                       );
                     })}

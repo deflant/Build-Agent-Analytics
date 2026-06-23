@@ -2970,6 +2970,44 @@ body {
 }
 
 
+/* ═══════════════════════════════════════════════════════════════════════════════
+   EXTRACTED INLINE STYLES — Complexity, ROI, Buttons
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* Complexity — dynamic color via CSS custom property */
+.ba-complexity__score {
+  color: var(--ba-complexity-color, var(--ba-primary));
+}
+
+.ba-complexity__label {
+  color: var(--ba-complexity-color, var(--ba-text-secondary));
+}
+
+.ba-complexity__row-value {
+  font-weight: 700;
+}
+
+/* Compact button variant (Edit Weights / Edit Estimates) */
+.ba-scan-btn--compact {
+  margin-left: auto;
+  font-size: 0.75rem;
+  padding: 0.375rem 1rem;
+}
+
+/* ROI metric value color variants */
+.ba-roi__metric-value--manual {
+  color: #dc2626;
+}
+
+.ba-roi__metric-value--agent {
+  color: #059669;
+}
+
+/* ROI breakdown row value */
+.ba-roi__breakdown-value {
+  font-weight: 700;
+}
+
 /* ===== File Attachment Card Styles ===== */
 .chat-file-attachments {
   display: flex;
