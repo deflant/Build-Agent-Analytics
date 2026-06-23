@@ -24,6 +24,7 @@ interface AppStat {
   messages: number;
   checkpoints: number;
   lastActivity: string;
+  lastActivityRaw: string;
   isFavorite: boolean;
 }
 
@@ -53,7 +54,7 @@ export default function Applications({ onNavigate }: ApplicationsProps) {
   const [kpiCheckpoints, setKpiCheckpoints] = useState<number>(0);
   const [kpiLoading, setKpiLoading] = useState(true);
 
-  const [sortKey, setSortKey] = useState<string>("lastActivity");
+  const [sortKey, setSortKey] = useState<string>("lastActivityRaw");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -156,6 +157,7 @@ export default function Applications({ onNavigate }: ApplicationsProps) {
           messages: 0,
           checkpoints: 0,
           lastActivity: "",
+          lastActivityRaw: "",
           isFavorite: storedFavorites.has(appId),
         };
         existing.conversations += 1;
@@ -163,6 +165,7 @@ export default function Applications({ onNavigate }: ApplicationsProps) {
         existing.checkpoints += chkByConvo.get(convoId) || 0;
         if (!existing.lastActivity) {
           existing.lastActivity = display(c.last_message_at);
+          existing.lastActivityRaw = value(c.last_message_at);
         }
         // Track the best name available
         if (existingName && !existing.name) {
@@ -257,7 +260,7 @@ export default function Applications({ onNavigate }: ApplicationsProps) {
     { key: "conversations", label: "Conversations", sortable: true },
     { key: "messages", label: "Total Messages", sortable: true },
     { key: "checkpoints", label: "Checkpoints", sortable: true },
-    { key: "lastActivity", label: "Last Activity", sortable: true },
+    { key: "lastActivity", label: "Last Activity", sortable: true, sortKey: "lastActivityRaw" },
   ];
 
   return (
@@ -318,7 +321,7 @@ export default function Applications({ onNavigate }: ApplicationsProps) {
         rows={filteredApps}
         onRowClick={(row) => onNavigate("app-detail", row.id)}
         emptyMessage={searchQuery ? "No applications match your search" : "No applications found"}
-        defaultSort={{ key: "lastActivity", direction: "desc" }}
+        defaultSort={{ key: "lastActivityRaw", direction: "desc" }}
         onSort={handleSort}
       />
     </div>
