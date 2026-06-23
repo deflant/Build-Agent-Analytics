@@ -127,6 +127,7 @@ declare global {
                     {
                         table: 'sys_ux_lib_asset'
                         id: '294a518ca129416fa2746f8783c3d193'
+                        deleted: true
                         key: {
                             name: 'x_snc_build_agranx/vendor-mermaid--4a199bd7'
                         }
@@ -329,6 +330,7 @@ declare global {
                     {
                         table: 'sn_glider_source_artifact_m2m'
                         id: '5c6886bde46d4a61a42c8109321e87b0'
+                        deleted: true
                         key: {
                             application_file: 'c1d520e7603040109abc2ab4b2b2b1bf'
                             source_artifact: '894ba54622ba49a880c45d36165607f3'
@@ -593,6 +595,7 @@ declare global {
                     {
                         table: 'sn_glider_source_artifact_m2m'
                         id: 'acd784555aad45419edb6d221b7eb384'
+                        deleted: true
                         key: {
                             application_file: '294a518ca129416fa2746f8783c3d193'
                             source_artifact: '894ba54622ba49a880c45d36165607f3'
@@ -677,6 +680,7 @@ declare global {
                     {
                         table: 'sys_ux_lib_asset'
                         id: 'c1d520e7603040109abc2ab4b2b2b1bf'
+                        deleted: true
                         key: {
                             name: 'x_snc_build_agranx/vendor-mermaid--4a199bd7.js.map'
                         }
@@ -857,6 +861,13 @@ declare global {
                     },
                     {
                         table: 'sys_ux_lib_asset'
+                        id: 'f74f9e789c6b4f4399415f66bc9e42bc'
+                        key: {
+                            name: 'x_snc_build_agranx/vendor-mermaid--5af3800d'
+                        }
+                    },
+                    {
+                        table: 'sys_ux_lib_asset'
                         id: 'fa642c7e78ef42f19e7cff22cac4a63c'
                         key: {
                             name: 'x_snc_build_agranx/classDiagram-v2-f2320105'
@@ -877,11 +888,26 @@ declare global {
                         }
                     },
                     {
+                        table: 'sn_glider_source_artifact_m2m'
+                        id: 'fd649d12f4da487ea07c87e66c70269f'
+                        key: {
+                            application_file: 'fe49fffa0ed94e0084d3a9c642e4c2f4'
+                            source_artifact: '894ba54622ba49a880c45d36165607f3'
+                        }
+                    },
+                    {
                         table: 'sys_dictionary'
                         id: 'fda272186e1f45cfa5cc27acf8a76230'
                         key: {
                             name: 'x_snc_build_agranx_settings'
                             element: 'user'
+                        }
+                    },
+                    {
+                        table: 'sys_ux_lib_asset'
+                        id: 'fe49fffa0ed94e0084d3a9c642e4c2f4'
+                        key: {
+                            name: 'x_snc_build_agranx/vendor-mermaid--5af3800d.js.map'
                         }
                     },
                     {
@@ -891,6 +917,14 @@ declare global {
                             name: 'x_snc_build_agranx_timeseries_cache'
                             element: 'message_count'
                             language: 'en'
+                        }
+                    },
+                    {
+                        table: 'sn_glider_source_artifact_m2m'
+                        id: 'ff4cdc12ac094e96a72d77a8ac969996'
+                        key: {
+                            application_file: 'f74f9e789c6b4f4399415f66bc9e42bc'
+                            source_artifact: '894ba54622ba49a880c45d36165607f3'
                         }
                     },
                 ]
