@@ -613,6 +613,363 @@ export async function fetchMessagesForTimeSeries(appId: string): Promise<any[]> 
   return messages || [];
 }
 
+// ─── User Consumption API ──────────────────────────────────────────────────────
+
+export interface UserConsumptionRow {
+  userId: string;
+  userName: string;
+  conversations: number;
+  userMessages: number;
+  nauUnits: number;
+  applicationNames: string[];
+}
+
+/**
+ * Determines if a message content JSON represents a user message.
+ * The content field is JSON with a "sender" property.
+ * User messages have sender === "user".
+ */
+function isUserMessageContent(contentField: any): boolean {
+  const raw = typeof contentField === "string" ? contentField : contentField?.value || "";
+  if (!raw) return false;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed.sender === "user";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Fetch user consumption data for a given month (YYYY-MM format).
+ * Groups conversations by user, counts USER messages only, and calculates NAU.
+ * Each user message = 25 Now Assist Units.
+ */
+export async function fetchUserConsumption(monthFilter?: string): Promise<UserConsumptionRow[]> {
+  // Build date filter query
+  let dateQuery = "";
+  if (monthFilter) {
+    const [year, month] = monthFilter.split("-").map(Number);
+    const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
+    // Compute next month
+    const nextMonth = month === 12 ? 1 : month + 1;
+    const nextYear = month === 12 ? year + 1 : year;
+    const endDate = `${nextYear}-${String(nextMonth).padStart(2, "0")}-01`;
+    dateQuery = `sys_created_on>=${startDate}^sys_created_on<${endDate}`;
+  }
+
+  // Fetch conversations with display values for user reference
+  const convoParams = new URLSearchParams({
+    sysparm_display_value: "all",
+    sysparm_fields: "sys_id,user,application_name,application_id,sys_created_on",
+  });
+  if (dateQuery) {
+    convoParams.set("sysparm_query", dateQuery + "^ORDERBYDESCsys_created_on");
+  } else {
+    convoParams.set("sysparm_query", "ORDERBYDESCsys_created_on");
+  }
+  const { result: convos } = await request(
+    `${BASE}/sn_build_agent_conversation?${convoParams}`
+  );
+  if (!convos || convos.length === 0) return [];
+
+  // Get conversation IDs for message lookup
+  const convoIds = convos.map((c: any) => {
+    const id = typeof c.sys_id === "string" ? c.sys_id : c.sys_id?.value || "";
+    return id;
+  }).filter(Boolean);
+
+  // Fetch messages with content field to identify user messages
+  const userMsgByConvo = new Map<string, number>();
+  if (convoIds.length > 0) {
+    const msgParams = new URLSearchParams({
+      sysparm_display_value: "all",
+      sysparm_fields: "sys_id,conversation,content",
+      sysparm_query: `conversationIN${convoIds.join(",")}`,
+      sysparm_limit: "10000",
+    });
+    const { result: msgs } = await request(`${BASE}/sn_build_agent_message?${msgParams}`);
+    if (msgs) {
+      msgs.forEach((m: any) => {
+        // Only count user messages
+        if (isUserMessageContent(m.content)) {
+          const cId = typeof m.conversation === "string" ? m.conversation : m.conversation?.value || "";
+          userMsgByConvo.set(cId, (userMsgByConvo.get(cId) || 0) + 1);
+        }
+      });
+    }
+  }
+
+  // Group by user
+  const userMap = new Map<string, UserConsumptionRow>();
+  convos.forEach((c: any) => {
+    const userId = typeof c.user === "string" ? c.user : c.user?.value || "";
+    const userName = typeof c.user === "string" ? c.user : c.user?.display_value || userId || "Unknown";
+    const convoId = typeof c.sys_id === "string" ? c.sys_id : c.sys_id?.value || "";
+    const appName = typeof c.application_name === "string"
+      ? c.application_name
+      : c.application_name?.display_value || c.application_name?.value || "";
+
+    if (!userId) return;
+
+    const existing = userMap.get(userId) || {
+      userId,
+      userName,
+      conversations: 0,
+      userMessages: 0,
+      nauUnits: 0,
+      applicationNames: [],
+    };
+
+    existing.conversations += 1;
+    const convoUserMsgs = userMsgByConvo.get(convoId) || 0;
+    existing.userMessages += convoUserMsgs;
+    existing.nauUnits += convoUserMsgs * 25; // 25 NAU per user message
+
+    if (appName && !existing.applicationNames.includes(appName)) {
+      existing.applicationNames.push(appName);
+    }
+
+    // Update display name if better
+    if (userName && userName !== userId && existing.userName === existing.userId) {
+      existing.userName = userName;
+    }
+
+    userMap.set(userId, existing);
+  });
+
+  return Array.from(userMap.values());
+}
+
+/**
+ * Fetch the date of the first (oldest) message in the Build Agent messages table.
+ * Returns a YYYY-MM string or null if no messages exist.
+ */
+export async function fetchFirstMessageDate(): Promise<string | null> {
+  const params = new URLSearchParams({
+    sysparm_fields: "sys_created_on",
+    sysparm_query: "ORDERBYsys_created_on",
+    sysparm_limit: "1",
+  });
+  const { result } = await request(`${BASE}/sn_build_agent_message?${params}`);
+  if (!result || result.length === 0) return null;
+  const dateStr = typeof result[0].sys_created_on === "string"
+    ? result[0].sys_created_on
+    : result[0].sys_created_on?.value || "";
+  if (!dateStr) return null;
+  const match = dateStr.match(/^(\d{4}-\d{2})/);
+  return match ? match[1] : null;
+}
+
+/**
+ * Generate all months from the first message date to the current month.
+ * Returns sorted YYYY-MM strings descending (most recent first).
+ */
+export async function fetchConsumptionMonths(): Promise<string[]> {
+  const firstMonth = await fetchFirstMessageDate();
+  if (!firstMonth) return [];
+
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+  // Generate all months from firstMonth to currentMonth
+  const months: string[] = [];
+  const [startYear, startMon] = firstMonth.split("-").map(Number);
+  const [endYear, endMon] = currentMonth.split("-").map(Number);
+
+  let y = endYear;
+  let m = endMon;
+  while (y > startYear || (y === startYear && m >= startMon)) {
+    months.push(`${y}-${String(m).padStart(2, "0")}`);
+    m--;
+    if (m < 1) { m = 12; y--; }
+  }
+
+  return months; // already descending (most recent first)
+}
+
+// ─── User Profile API ──────────────────────────────────────────────────────────
+
+export interface UserProfileData {
+  userId: string;
+  userName: string;
+  totalMessages: number;
+  totalConversations: number;
+  nauUnits: number;
+  appBreakdown: Array<{
+    appId: string;
+    appName: string;
+    messages: number;
+    conversations: number;
+    percentage: number;
+    lastActivity: string; // ISO datetime of last user message for this app
+  }>;
+  timeline: Array<{
+    date: string; // YYYY-MM-DD
+    messages: number;
+  }>;
+}
+
+/**
+ * Fetch detailed profile data for a specific user.
+ * Aggregates conversations, messages per app, and temporal activity.
+ */
+export async function fetchUserProfile(userId: string): Promise<UserProfileData> {
+  // 1. Fetch all conversations for this user
+  const convoParams = new URLSearchParams({
+    sysparm_display_value: "all",
+    sysparm_fields: "sys_id,user,application_name,application_id,sys_created_on",
+    sysparm_query: `user=${userId}^ORDERBYDESCsys_created_on`,
+    sysparm_limit: "1000",
+  });
+  const { result: convos } = await request(
+    `${BASE}/sn_build_agent_conversation?${convoParams}`
+  );
+  if (!convos || convos.length === 0) {
+    // Resolve user name from sys_user
+    let userName = userId;
+    try {
+      const userParams = new URLSearchParams({
+        sysparm_display_value: "all",
+        sysparm_fields: "name",
+      });
+      const { result: userRec } = await request(`${BASE}/sys_user/${userId}?${userParams}`);
+      if (userRec && userRec.name) {
+        userName = typeof userRec.name === "string" ? userRec.name : userRec.name.display_value || userRec.name.value || userId;
+      }
+    } catch { /* ignore */ }
+    return {
+      userId,
+      userName,
+      totalMessages: 0,
+      totalConversations: 0,
+      nauUnits: 0,
+      appBreakdown: [],
+      timeline: [],
+    };
+  }
+
+  // Get user display name from first conversation
+  const firstConvo = convos[0];
+  const userName = typeof firstConvo.user === "string"
+    ? firstConvo.user
+    : firstConvo.user?.display_value || firstConvo.user?.value || userId;
+
+  // Build conversation map: convoId -> { appId, appName }
+  const convoMap = new Map<string, { appId: string; appName: string }>();
+  const convoIds: string[] = [];
+  convos.forEach((c: any) => {
+    const cId = typeof c.sys_id === "string" ? c.sys_id : c.sys_id?.value || "";
+    const appId = typeof c.application_id === "string" ? c.application_id : c.application_id?.value || "";
+    const appName = typeof c.application_name === "string"
+      ? c.application_name
+      : c.application_name?.display_value || c.application_name?.value || "";
+    if (cId) {
+      convoIds.push(cId);
+      convoMap.set(cId, { appId, appName });
+    }
+  });
+
+  // 2. Fetch all messages in batches by conversation IDs to avoid the 10000 API limit
+  //    (dot-walking with a single request truncates recent conversations for active users)
+  const CONVO_BATCH_SIZE = 25;
+  const allMessages: any[] = [];
+  for (let i = 0; i < convoIds.length; i += CONVO_BATCH_SIZE) {
+    const batch = convoIds.slice(i, i + CONVO_BATCH_SIZE);
+    const msgParams = new URLSearchParams({
+      sysparm_display_value: "all",
+      sysparm_fields: "sys_id,conversation,content,sys_created_on",
+      sysparm_query: `conversationIN${batch.join(",")}^ORDERBYsys_created_on`,
+      sysparm_limit: "10000",
+    });
+    const { result: batchMsgs } = await request(`${BASE}/sn_build_agent_message?${msgParams}`);
+    if (batchMsgs) allMessages.push(...batchMsgs);
+  }
+  const messages = allMessages;
+
+  // 3. Process messages: count user messages per app and per day
+  const appStats = new Map<string, { appId: string; appName: string; messages: number; conversations: Set<string>; lastActivity: string }>();
+  const dailyMessages = new Map<string, number>();
+  let totalUserMessages = 0;
+
+  if (messages) {
+    messages.forEach((m: any) => {
+      if (!isUserMessageContent(m.content)) return;
+
+      totalUserMessages++;
+      const convoId = typeof m.conversation === "string" ? m.conversation : m.conversation?.value || "";
+      const convoInfo = convoMap.get(convoId);
+      const appId = convoInfo?.appId || "unknown";
+      const appName = convoInfo?.appName || "Unknown App";
+
+      // App breakdown
+      if (!appStats.has(appId)) {
+        appStats.set(appId, { appId, appName, messages: 0, conversations: new Set(), lastActivity: "" });
+      }
+      const stat = appStats.get(appId)!;
+      stat.messages++;
+      stat.conversations.add(convoId);
+
+      // Timeline - extract date (YYYY-MM-DD) and track last activity per app
+      const createdOn = typeof m.sys_created_on === "string"
+        ? m.sys_created_on
+        : m.sys_created_on?.value || "";
+      if (createdOn) {
+        // Track last activity (most recent message timestamp) per app
+        if (createdOn > stat.lastActivity) {
+          stat.lastActivity = createdOn;
+        }
+        const dateMatch = createdOn.match(/^(\d{4}-\d{2}-\d{2})/);
+        if (dateMatch) {
+          const day = dateMatch[1];
+          dailyMessages.set(day, (dailyMessages.get(day) || 0) + 1);
+        }
+      }
+    });
+  }
+
+  // 4. Resolve app names if any are empty
+  const idsNeedingNames = Array.from(appStats.values())
+    .filter((s) => !s.appName || s.appName === "Unknown App")
+    .map((s) => s.appId)
+    .filter((id) => id && id !== "unknown");
+  if (idsNeedingNames.length > 0) {
+    const nameMap = await fetchAppNames(idsNeedingNames);
+    for (const stat of appStats.values()) {
+      if (nameMap.has(stat.appId)) {
+        stat.appName = nameMap.get(stat.appId)!;
+      }
+    }
+  }
+
+  // 5. Build app breakdown with percentages, sorted by most recent activity first
+  const appBreakdown = Array.from(appStats.values())
+    .map((s) => ({
+      appId: s.appId,
+      appName: s.appName || s.appId,
+      messages: s.messages,
+      conversations: s.conversations.size,
+      percentage: totalUserMessages > 0 ? Math.round((s.messages / totalUserMessages) * 1000) / 10 : 0,
+      lastActivity: s.lastActivity,
+    }))
+    .sort((a, b) => b.lastActivity.localeCompare(a.lastActivity));
+
+  // 6. Build timeline sorted by date
+  const timeline = Array.from(dailyMessages.entries())
+    .map(([date, count]) => ({ date, messages: count }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  return {
+    userId,
+    userName,
+    totalMessages: totalUserMessages,
+    totalConversations: convos.length,
+    nauUnits: totalUserMessages * 25,
+    appBreakdown,
+    timeline,
+  };
+}
+
 // ─── Task Telemetry API ────────────────────────────────────────────────────────
 
 export async function fetchTaskTelemetry(query = "") {

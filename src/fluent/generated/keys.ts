@@ -12,6 +12,7 @@ declare global {
                     'app.css': {
                         table: 'sys_ux_theme_asset'
                         id: '3a4fd1dead30496baab6e5eb4d8c6a45'
+                        deleted: true
                     }
                     bom_json: {
                         table: 'sys_module'
@@ -24,6 +25,14 @@ declare global {
                     package_json: {
                         table: 'sys_module'
                         id: '165e12c0eb314e96b629622ed6c40f99'
+                    }
+                    'styles/conversation.css': {
+                        table: 'sys_ux_theme_asset'
+                        id: 'd1a764e2335146cf8d6b32e179d6d077'
+                    }
+                    'styles/shared.css': {
+                        table: 'sys_ux_theme_asset'
+                        id: 'f09027f3b1d24c978a6083342bce7299'
                     }
                 }
                 composite: [

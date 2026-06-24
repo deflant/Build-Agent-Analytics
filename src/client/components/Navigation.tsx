@@ -7,6 +7,7 @@ interface NavigationProps {
 
 const TABS = [
   { id: "applications", label: "Applications" },
+  { id: "consumption", label: "Consumption" },
   { id: "performance", label: "Performance" },
   { id: "timeseries", label: "TimeSeries" },
 ];

@@ -2,11 +2,10 @@ import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { display, value, parseMessageContent, senderLabel, countMessagesBySender } from "../utils/fields.ts";
 import type { ToolDetails, FileAttachment } from "../utils/fields.ts";
-import { fetchConversation, fetchMessages, fetchCheckpoints } from "../services/api.ts";
+import { fetchConversation, fetchMessages } from "../services/api.ts";
 import { analyzeConversation, analyzeMessage, formatEstimate, formatTokenCount } from "../utils/tokenEstimation.ts";
 import type { ConversationTokenUsage, MessageTokenInfo } from "../utils/tokenEstimation.ts";
 import KpiCard from "./KpiCard.tsx";
-import DataTable from "./DataTable.tsx";
 import MarkdownRenderer from "./MarkdownRenderer.tsx";
 
 interface ConversationDetailProps {
@@ -720,9 +719,10 @@ export default function ConversationDetail({
   conversationId,
   onNavigate,
 }: ConversationDetailProps) {
+  const NOWASSIST_UNIT_COST = 25;
+
   const [conversation, setConversation] = useState<any>(null);
   const [messages, setMessages] = useState<any[]>([]);
-  const [checkpoints, setCheckpoints] = useState<any[]>([]);
   const [userCount, setUserCount] = useState(0);
   const [assistantCount, setAssistantCount] = useState(0);
   const [tokenUsage, setTokenUsage] = useState<ConversationTokenUsage | null>(null);
@@ -735,14 +735,12 @@ export default function ConversationDetail({
 
   async function loadData() {
     try {
-      const [convo, msgs, chks] = await Promise.all([
+      const [convo, msgs] = await Promise.all([
         fetchConversation(conversationId),
         fetchMessages(conversationId),
-        fetchCheckpoints(conversationId),
       ]);
       setConversation(convo);
       setMessages(msgs);
-      setCheckpoints(chks);
 
       const counts = countMessagesBySender(msgs);
       setUserCount(counts.user);
@@ -761,13 +759,9 @@ export default function ConversationDetail({
   if (loading) return <div className="ba-loading">Loading conversation...</div>;
   if (!conversation) return <div className="ba-empty">Conversation not found</div>;
 
-  const conversationItems = groupMessages(messages);
+  const nowAssistUnits = userCount * NOWASSIST_UNIT_COST;
 
-  const chkColumns = [
-    { key: "sequence", label: "Seq", render: (r: any) => display(r.sequence) },
-    { key: "name", label: "Name", render: (r: any) => display(r.name) || "—" },
-    { key: "status", label: "Status", render: (r: any) => display(r.status) },
-  ];
+  const conversationItems = groupMessages(messages);
 
   // Determine back navigation based on whether we know the app
   const appId = value(conversation.application_id);
@@ -825,7 +819,12 @@ export default function ConversationDetail({
         <KpiCard title="User Messages" value={userCount} icon="user" />
         <KpiCard title="Assistant Messages" value={assistantCount} icon="assistant" />
         <KpiCard title="Total Messages" value={messages.length} />
-        <KpiCard title="Checkpoints" value={checkpoints.length} />
+        <KpiCard
+          title="NowAssist Units"
+          value={nowAssistUnits.toLocaleString("de-DE")}
+          icon="cost"
+          tooltip={`${userCount} user messages × ${NOWASSIST_UNIT_COST} NowAssist units = ${nowAssistUnits.toLocaleString("de-DE")}`}
+        />
       </div>
 
       {/* Token Usage Summary */}
@@ -916,10 +915,6 @@ export default function ConversationDetail({
         </div>
       </div>
 
-      <div className="ba-section">
-        <h2 className="ba-section__title">Checkpoints ({checkpoints.length})</h2>
-        <DataTable columns={chkColumns} rows={checkpoints} emptyMessage="No checkpoints" />
-      </div>
     </div>
   );
 }
