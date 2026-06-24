@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { fetchUserProfile } from "../services/api.ts";
 import type { UserProfileData } from "../services/api.ts";
+import { useQueryTracker } from "../services/queryTracker.ts";
+import { SkeletonUserProfileView } from "./Skeleton.tsx";
 import KpiCard from "./KpiCard.tsx";
 
 interface UserProfileProps {
@@ -26,9 +28,10 @@ function PieChart({ data }: { data: UserProfileData["appBreakdown"] }) {
     return <div className="ba-chart__empty">No application data available</div>;
   }
 
-  // Top 5 apps + group the rest as "Altro"
-  const top5 = data.slice(0, 5);
-  const rest = data.slice(5);
+  // Sort by percentage descending to get the true top 5 by consumption
+  const sorted = [...data].sort((a, b) => b.percentage - a.percentage);
+  const top5 = sorted.slice(0, 5);
+  const rest = sorted.slice(5);
   const otherPercentage = rest.reduce((sum, app) => sum + app.percentage, 0);
   const otherMessages = rest.reduce((sum, app) => sum + app.messages, 0);
 
@@ -200,19 +203,27 @@ function TimelineChart({ data }: { data: UserProfileData["timeline"] }) {
   );
 }
 
+type SortColumn = "appName" | "lastActivity" | "messages" | "conversations" | "percentage";
+type SortDirection = "asc" | "desc";
+
 // ─── Main UserProfile Component ──────────────────────────────────────────────
 export default function UserProfile({ userId, onNavigate }: UserProfileProps) {
   const [profile, setProfile] = useState<UserProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sortColumn, setSortColumn] = useState<SortColumn>("lastActivity");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+
+  const { track, reset } = useQueryTracker();
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
       setLoading(true);
       setError(null);
+      reset();
       try {
-        const data = await fetchUserProfile(userId);
+        const data = await track("Loading user profile", () => fetchUserProfile(userId));
         if (!cancelled) setProfile(data);
       } catch (e: any) {
         if (!cancelled) setError(e.message || "Failed to load user profile");
@@ -225,7 +236,7 @@ export default function UserProfile({ userId, onNavigate }: UserProfileProps) {
   }, [userId]);
 
   if (loading) {
-    return <div className="ba-loading">Loading user profile...</div>;
+    return <SkeletonUserProfileView />;
   }
 
   if (error) {
@@ -312,20 +323,55 @@ export default function UserProfile({ userId, onNavigate }: UserProfileProps) {
         {/* App Breakdown Table */}
         <div className="ba-chart ba-user-profile__chart-card ba-user-profile__chart-card--wide">
           <h3 className="ba-section__title">Per-Application Breakdown</h3>
-          <p style={{ fontSize: "12px", color: "var(--ba-text-secondary, #6b7280)", margin: "0 0 8px 0" }}>Sorted by most recent activity</p>
+          <p style={{ fontSize: "12px", color: "var(--ba-text-secondary, #6b7280)", margin: "0 0 8px 0" }}>
+            Sorted by {sortColumn === "appName" ? "application name" : sortColumn === "lastActivity" ? "last activity" : sortColumn === "messages" ? "messages" : sortColumn === "conversations" ? "conversations" : "% of total"} ({sortDirection === "desc" ? "↓" : "↑"})
+          </p>
           <div className="ba-table-wrapper ba-user-profile__table-inline ba-user-profile__table-scroll" style={{ maxHeight: "400px", overflowY: "auto" }}>
             <table className="ba-table">
               <thead style={{ position: "sticky", top: 0, zIndex: 1, background: "#fff" }}>
                 <tr>
-                  <th>Application</th>
-                  <th>Last Activity</th>
-                  <th>Messages</th>
-                  <th>Conversations</th>
-                  <th>% of Total</th>
+                  {([
+                    ["appName", "Application"],
+                    ["lastActivity", "Last Activity"],
+                    ["messages", "Messages"],
+                    ["conversations", "Conversations"],
+                    ["percentage", "% of Total"],
+                  ] as [SortColumn, string][]).map(([col, label]) => (
+                    <th
+                      key={col}
+                      onClick={() => {
+                        if (sortColumn === col) {
+                          setSortDirection(sortDirection === "desc" ? "asc" : "desc");
+                        } else {
+                          setSortColumn(col);
+                          setSortDirection(col === "appName" ? "asc" : "desc");
+                        }
+                      }}
+                      style={{ cursor: "pointer", userSelect: "none" }}
+                      className={sortColumn === col ? "ba-th--active" : ""}
+                    >
+                      {label} {sortColumn === col ? (sortDirection === "desc" ? "▼" : "▲") : ""}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
-                {profile.appBreakdown.map((app) => (
+                {[...profile.appBreakdown]
+                  .sort((a, b) => {
+                    const dir = sortDirection === "desc" ? -1 : 1;
+                    if (sortColumn === "appName") {
+                      return dir * a.appName.localeCompare(b.appName);
+                    } else if (sortColumn === "lastActivity") {
+                      return dir * a.lastActivity.localeCompare(b.lastActivity);
+                    } else if (sortColumn === "messages") {
+                      return dir * (a.messages - b.messages);
+                    } else if (sortColumn === "conversations") {
+                      return dir * (a.conversations - b.conversations);
+                    } else {
+                      return dir * (a.percentage - b.percentage);
+                    }
+                  })
+                  .map((app) => (
                   <tr key={app.appId}>
                     <td>
                       <span className="ba-user-profile__app-name">{app.appName}</span>

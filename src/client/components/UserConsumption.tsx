@@ -4,6 +4,8 @@ import {
   fetchConsumptionMonths,
 } from "../services/api.ts";
 import type { UserConsumptionRow } from "../services/api.ts";
+import { useQueryTracker } from "../services/queryTracker.ts";
+import { SkeletonConsumptionView } from "./Skeleton.tsx";
 import DataTable from "./DataTable.tsx";
 import type { Column } from "./DataTable.tsx";
 import KpiCard from "./KpiCard.tsx";
@@ -40,7 +42,10 @@ export default function UserConsumption({ onNavigate }: UserConsumptionProps) {
   const [sortKey, setSortKey] = useState<string>("nauUnits");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
+  const { track, reset } = useQueryTracker();
+
   useEffect(() => {
+    reset();
     loadMonths();
   }, []);
 
@@ -50,7 +55,7 @@ export default function UserConsumption({ onNavigate }: UserConsumptionProps) {
 
   async function loadMonths() {
     try {
-      const available = await fetchConsumptionMonths();
+      const available = await track("Fetching available months", () => fetchConsumptionMonths());
       setMonths(available);
       // If current month is not in the list, default to the most recent month
       if (available.length > 0 && !available.includes(selectedMonth)) {
@@ -65,7 +70,7 @@ export default function UserConsumption({ onNavigate }: UserConsumptionProps) {
     setLoading(true);
     setKpiLoading(true);
     try {
-      const data = await fetchUserConsumption(month);
+      const data = await track("Fetching consumption data", () => fetchUserConsumption(month));
       setUsers(data);
 
       // Compute KPIs from the data
@@ -126,7 +131,7 @@ export default function UserConsumption({ onNavigate }: UserConsumptionProps) {
     { key: "nauUnits", label: "Now Assist Units", sortable: true },
   ];
 
-  if (loading && kpiLoading) return <div className="ba-loading">Loading consumption data...</div>;
+  if (loading && kpiLoading) return <SkeletonConsumptionView />;
 
   return (
     <div className="ba-view">

@@ -8,6 +8,8 @@ import {
   fetchTableCount,
   fetchDistinctCount,
 } from "../services/api.ts";
+import { useQueryTracker } from "../services/queryTracker.ts";
+import { SkeletonApplicationsView } from "./Skeleton.tsx";
 import DataTable from "./DataTable.tsx";
 import type { Column } from "./DataTable.tsx";
 import KpiCard from "./KpiCard.tsx";
@@ -58,7 +60,10 @@ export default function Applications({ onNavigate }: ApplicationsProps) {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [searchQuery, setSearchQuery] = useState("");
 
+  const { track, reset } = useQueryTracker();
+
   useEffect(() => {
+    reset();
     loadKpis();
     loadTableData();
   }, []);
@@ -68,10 +73,10 @@ export default function Applications({ onNavigate }: ApplicationsProps) {
     setKpiLoading(true);
     try {
       const [convos, msgs, apps, chks] = await Promise.all([
-        fetchTableCount("sn_build_agent_conversation"),
-        fetchTableCount("sn_build_agent_message"),
-        fetchDistinctCount("sn_build_agent_conversation", "application_id", "application_idISNOTEMPTY"),
-        fetchTableCount("sn_build_agent_checkpoint"),
+        track("Counting conversations", () => fetchTableCount("sn_build_agent_conversation")),
+        track("Counting messages", () => fetchTableCount("sn_build_agent_message")),
+        track("Counting apps", () => fetchDistinctCount("sn_build_agent_conversation", "application_id", "application_idISNOTEMPTY")),
+        track("Counting checkpoints", () => fetchTableCount("sn_build_agent_checkpoint")),
       ]);
       setKpiConversations(convos);
       setKpiMessages(msgs);
@@ -123,9 +128,9 @@ export default function Applications({ onNavigate }: ApplicationsProps) {
   async function loadTableData() {
     try {
       const [convos, msgs, chks] = await Promise.all([
-        fetchConversations("ORDERBYDESClast_message_at"),
-        fetchAllMessages(),
-        fetchAllCheckpoints(),
+        track("Fetching conversations", () => fetchConversations("ORDERBYDESClast_message_at")),
+        track("Fetching messages", () => fetchAllMessages()),
+        track("Fetching checkpoints", () => fetchAllCheckpoints()),
       ]);
 
       const msgByConvo = new Map<string, number>();
@@ -177,7 +182,7 @@ export default function Applications({ onNavigate }: ApplicationsProps) {
       // Resolve app details (name + description) from sys_app for ALL apps
       const allAppIds = Array.from(appMap.keys());
       if (allAppIds.length > 0) {
-        const resolvedDetails = await fetchAppDetails(allAppIds);
+        const resolvedDetails = await track("Resolving app details", () => fetchAppDetails(allAppIds));
         resolvedDetails.forEach((info, id) => {
           const stat = appMap.get(id);
           if (stat) {
@@ -239,7 +244,7 @@ export default function Applications({ onNavigate }: ApplicationsProps) {
       })
     : sortedApps;
 
-  if (loading && kpiLoading) return <div className="ba-loading">Loading applications...</div>;
+  if (loading && kpiLoading) return <SkeletonApplicationsView />;
 
   const columns: Column[] = [
     {

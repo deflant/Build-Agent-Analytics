@@ -307,6 +307,16 @@
   font-family: var(--ba-font-mono);
 }
 
+/* Sortable table headers */
+.ba-table th.ba-th--active {
+  color: var(--ba-primary);
+}
+
+.ba-user-profile__table-inline .ba-table th:hover {
+  color: var(--ba-primary);
+  background: var(--ba-surface-hover, #f9fafb);
+}
+
 /* Responsive — User Profile specific */
 @media (max-width: 768px) {
   .ba-user-profile__charts {

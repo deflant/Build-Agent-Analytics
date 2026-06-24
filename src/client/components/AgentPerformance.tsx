@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { value, display } from "../utils/fields.ts";
 import { fetchTaskTelemetry } from "../services/api.ts";
+import { useQueryTracker } from "../services/queryTracker.ts";
+import { SkeletonPerformanceView } from "./Skeleton.tsx";
 import KpiCard from "./KpiCard.tsx";
 import DataTable from "./DataTable.tsx";
 import type { Column } from "./DataTable.tsx";
@@ -64,14 +66,16 @@ function formatDuration(totalSeconds: number): string {
 export default function AgentPerformance() {
   const [tasks, setTasks] = useState<TaskRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const { track, reset } = useQueryTracker();
 
   useEffect(() => {
+    reset();
     loadData();
   }, []);
 
   async function loadData() {
     try {
-      const result = await fetchTaskTelemetry();
+      const result = await track("Fetching task telemetry", () => fetchTaskTelemetry());
       setTasks(result);
     } catch (e) {
       console.error("AgentPerformance load error:", e);
@@ -80,7 +84,7 @@ export default function AgentPerformance() {
     }
   }
 
-  if (loading) return <div className="ba-loading">Loading performance data...</div>;
+  if (loading) return <SkeletonPerformanceView />;
   if (!tasks.length) return <div className="ba-empty">No task telemetry data available yet.</div>;
 
   // ─── Compute KPIs ────────────────────────────────────────────────────────────

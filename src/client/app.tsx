@@ -7,6 +7,8 @@ import AgentPerformance from "./components/AgentPerformance.tsx";
 import TimeSeriesView from "./components/TimeSeriesView.tsx";
 import UserConsumption from "./components/UserConsumption.tsx";
 import UserProfile from "./components/UserProfile.tsx";
+import LoadingModal from "./components/LoadingModal.tsx";
+import { QueryTrackerContext, useQueryTrackerState } from "./services/queryTracker.ts";
 import "./styles/base.css";
 import "./styles/shared.css";
 import "./styles/applications.css";
@@ -17,6 +19,7 @@ import "./styles/timeseries.css";
 import "./styles/consumption.css";
 import "./styles/user-profile.css";
 import "./styles/json-tree.css";
+import "./styles/loading.css";
 import "./styles/responsive.css";
 
 declare const window: any;
@@ -38,6 +41,7 @@ function getViewFromUrl(): ViewState {
 
 export default function App() {
   const [currentView, setCurrentView] = useState<ViewState>(getViewFromUrl);
+  const trackerState = useQueryTrackerState();
 
   useEffect(() => {
     const onPopState = () => setCurrentView(getViewFromUrl());
@@ -47,6 +51,8 @@ export default function App() {
 
   const navigateToView = useCallback(
     (viewName: string, id?: string | null, month?: string | null) => {
+      trackerState.reset();
+
       const params = new URLSearchParams({ view: viewName });
       if (id) params.set("id", id);
       if (month) params.set("month", month);
@@ -64,7 +70,7 @@ export default function App() {
       document.title = title;
       setCurrentView({ view: viewName, id: id || null, month: month || null });
     },
-    []
+    [trackerState.reset]
   );
 
   const { view, id, month } = currentView;
@@ -102,9 +108,12 @@ export default function App() {
   };
 
   return (
-    <div className="ba-app">
-      <Navigation currentView={view} onNavigate={(v) => navigateToView(v)} />
-      <main className="ba-main">{renderView()}</main>
-    </div>
+    <QueryTrackerContext.Provider value={trackerState}>
+      <div className="ba-app">
+        <Navigation currentView={view} onNavigate={(v) => navigateToView(v)} />
+        <main className="ba-main">{renderView()}</main>
+      </div>
+      <LoadingModal />
+    </QueryTrackerContext.Provider>
   );
 }

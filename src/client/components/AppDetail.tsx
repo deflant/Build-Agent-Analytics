@@ -20,6 +20,8 @@ import {
   mergeWithDefaults,
 } from "../utils/complexity.ts";
 import type { ComplexityWeights, PartnerEstimates, ROIResult, CompositionKey } from "../utils/complexity.ts";
+import { useQueryTracker } from "../services/queryTracker.ts";
+import { SkeletonAppDetailView } from "./Skeleton.tsx";
 import KpiCard from "./KpiCard.tsx";
 import DataTable from "./DataTable.tsx";
 
@@ -231,16 +233,19 @@ export default function AppDetail({ appId, onNavigate }: AppDetailProps) {
   const [editingEstimates, setEditingEstimates] = useState(false);
   const [roiOpen, setRoiOpen] = useState(false);
 
+  const { track, reset } = useQueryTracker();
+
   useEffect(() => {
+    reset();
     loadData();
     loadUserSettings();
   }, [appId]);
 
   async function loadUserSettings() {
     try {
-      const savedWeights = await fetchSettings("complexity_weights");
+      const savedWeights = await track("Loading settings", () => fetchSettings("complexity_weights"));
       if (savedWeights) setWeights(mergeWithDefaults(savedWeights, DEFAULT_WEIGHTS));
-      const savedEstimates = await fetchSettings("partner_estimates");
+      const savedEstimates = await track("Loading estimates", () => fetchSettings("partner_estimates"));
       if (savedEstimates) setEstimates(mergeWithDefaults(savedEstimates, DEFAULT_PARTNER_ESTIMATES));
     } catch (e) {
       // Use defaults if settings fetch fails
@@ -249,8 +254,8 @@ export default function AppDetail({ appId, onNavigate }: AppDetailProps) {
 
   async function loadData() {
     try {
-      const convos = await fetchConversations(
-        `application_id=${appId}^ORDERBYDESClast_message_at`
+      const convos = await track("Fetching conversations", () =>
+        fetchConversations(`application_id=${appId}^ORDERBYDESClast_message_at`)
       );
 
       // Resolve app name
@@ -259,7 +264,7 @@ export default function AppDetail({ appId, onNavigate }: AppDetailProps) {
         resolvedName = display(convos[0].application_name);
       }
       if (!resolvedName) {
-        const nameMap = await fetchAppNames([appId]);
+        const nameMap = await track("Resolving app name", () => fetchAppNames([appId]));
         resolvedName = nameMap.get(appId) || `App (${appId.substring(0, 8)}...)`;
       }
       setAppName(resolvedName);
@@ -274,10 +279,12 @@ export default function AppDetail({ appId, onNavigate }: AppDetailProps) {
 
       for (const c of convos) {
         const cId = value(c.sys_id);
-        const [msgs, chks] = await Promise.all([
-          fetchMessages(cId),
-          fetchCheckpoints(cId),
-        ]);
+        const [msgs, chks] = await track(`Conv ${convoResults.length + 1}/${convos.length}`, () =>
+          Promise.all([
+            fetchMessages(cId),
+            fetchCheckpoints(cId),
+          ])
+        );
         const counts = countMessagesBySender(msgs);
         userTotal += counts.user;
         assistantTotal += counts.assistant;
@@ -354,7 +361,7 @@ export default function AppDetail({ appId, onNavigate }: AppDetailProps) {
     }
   }
 
-  if (loading) return <div className="ba-loading">Loading app details...</div>;
+  if (loading) return <SkeletonAppDetailView />;
 
   const nowAssistUnits = totalUser * NOWASSIST_UNIT_COST;
 
