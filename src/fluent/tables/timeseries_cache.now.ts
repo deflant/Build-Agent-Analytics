@@ -25,7 +25,7 @@ export const x_snc_build_agranx_timeseries_cache = Table({
     }),
     application_id: StringColumn({
       label: "Application ID",
-      max_length: 32,
+      maxLength: 32,
       mandatory: true,
     }),
   },

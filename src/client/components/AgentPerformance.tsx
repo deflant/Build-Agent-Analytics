@@ -34,6 +34,7 @@ interface TaskRow {
   request: string;
   taskType: string;
   duration: string;
+  durationSeconds: number;
   buildCycles: number;
   buildErrors: string;
   linesAdded: number;
@@ -41,6 +42,7 @@ interface TaskRow {
   linesDeleted: number;
   rollbacks: number;
   date: string;
+  dateRaw: string;
 }
 
 function parseDurationSeconds(dur: string): number {
@@ -140,6 +142,7 @@ export default function AgentPerformance() {
     request: display(t.request),
     taskType: value(t.task_type),
     duration: formatDuration(parseDurationSeconds(value(t.total_time))),
+    durationSeconds: parseDurationSeconds(value(t.total_time)),
     buildCycles: parseInt(value(t.build_fix_cycles)) || 0,
     buildErrors: value(t.build_fix_errors) || "",
     linesAdded: parseInt(value(t.lines_added)) || 0,
@@ -147,6 +150,7 @@ export default function AgentPerformance() {
     linesDeleted: parseInt(value(t.lines_deleted)) || 0,
     rollbacks: parseInt(value(t.rollbacks)) || 0,
     date: display(t.start_time),
+    dateRaw: value(t.start_time),
   }));
 
   const columns: Column[] = [
@@ -184,7 +188,7 @@ export default function AgentPerformance() {
         </span>
       ),
     },
-    { key: "duration", label: "Duration", sortable: true },
+    { key: "duration", label: "Duration", sortable: true, sortKey: "durationSeconds" },
     { key: "buildCycles", label: "Build Cycles", sortable: true,
       render: (row: TaskRow) => (
         <span className="ba-build-cycles">
@@ -207,7 +211,7 @@ export default function AgentPerformance() {
         </span>
       ),
     },
-    { key: "date", label: "Date", sortable: true },
+    { key: "date", label: "Date", sortable: true, sortKey: "dateRaw" },
   ];
 
   return (
@@ -306,7 +310,7 @@ export default function AgentPerformance() {
           columns={columns}
           rows={rows}
           emptyMessage="No tasks recorded yet"
-          defaultSort={{ key: "date", direction: "desc" }}
+          defaultSort={{ key: "dateRaw", direction: "desc" }}
           expandContent={(row: TaskRow) => {
             if (!row.buildErrors) return null;
             return <BuildErrorDisplay rawErrors={row.buildErrors} />;
